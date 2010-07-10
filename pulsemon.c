@@ -83,19 +83,19 @@ int main(int argc, char *argv[]) {
 
 	/* TIOCM_RNG only generates events in the 1->0 direction. bah.
 	 *
-	 * Max flow rate:    6.000m³/hr (!)
-	 * Pulse interval:   0.010m³
-	 * Pulse duration:   0.001m³ (estimate)
-	 *                   0.600s
+	 * Max meter flow rate:    6.000m³/hr (!)
+	 * Pulse interval:         0.010m³
+	 * Pulse duration:         0.001m³ (estimate)
+	 *                         0.600s
 	 *
-	 * Likely flow rate: 4.000m³/day (max)
-	 * Pulse interval:   0.010m³
-	 * Pulse duration:   0.001m³ (estimate)
-	 *                  21.600s
+	 * Mxx boiler flow rate:   2.711m³/hr (max)
+	 * Pulse interval:         0.010m³
+	 * Pulse duration:         0.001m³ (estimate)
+	 *                         1.328s
 	 *
-	 * Polling every:    0.500s
+	 * Polling every:          0.250s
 	 */
-	while (usleep(500000) == 0) {
+	while (usleep(250000) == 0) {
 		struct timeval tv;
 
 		if (ioctl(fd, TIOCMGET, &state) != 0) {
