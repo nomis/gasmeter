@@ -28,8 +28,6 @@
 int main(int argc, char *argv[]) {
 	int fd, state, last, iflags;
 	struct termios ios;
-	struct timeval tv;
-	FILE *dev;
 #if 0
 	pid_t pid;
 #endif
@@ -62,10 +60,11 @@ int main(int argc, char *argv[]) {
 	cerror("Failed to flush terminal input", ioctl(fd, TCFLSH, 0) < 0);
 	cerror("Failed to set terminal attributes", tcsetattr(fd, TCSANOW, &ios));
 
-	dev = fdopen(fd, "r");
-	cerror(argv[1], !dev);
-
 #if 0
+	cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
+	status |= SERIO_OUT;
+	cerror("Failed to set serial IO status", ioctl(fd, TIOCMSET, &state) != 0);
+
 	pid = fork();
 	cerror("Failed to become a daemon", pid < 0);
 	if (pid)
@@ -75,43 +74,20 @@ int main(int argc, char *argv[]) {
 	close(2);
 #endif
 
-	cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
-	state = (int)((state & TIOCM_RNG) != 0);
-	gettimeofday(&tv, NULL);
-	printf("%lu.%06lu: %d\n", tv.tv_sec, tv.tv_usec, state);
-	last = state;
-
-	/* TIOCM_RNG only generates events in the 1->0 direction. bah.
-	 *
-	 * Max meter flow rate:    6.000m³/hr (!)
-	 * Pulse interval:         0.010m³
-	 * Pulse duration:         0.001m³ (estimate)
-	 *                         0.600s
-	 *
-	 * Mxx boiler flow rate:   2.711m³/hr (max)
-	 * Pulse interval:         0.010m³
-	 * Pulse duration:         0.001m³ (estimate)
-	 *                         1.328s
-	 *
-	 * Polling every:          0.250s
-	 */
-	while (usleep(250000) == 0) {
+	last = ~0;
+	do {
 		struct timeval tv;
 
-		if (ioctl(fd, TIOCMGET, &state) != 0) {
-			cerror("Failed to close serial device", close(fd));
-			xerror("Failed to get serial IO status");
-		}
-
-		state = (int)((state & TIOCM_RNG) != 0);
+		cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
+		state &= SERIO_IN;
 
 		if (last != state) {
 			gettimeofday(&tv, NULL);
-			printf("%lu.%06lu: %d\n", tv.tv_sec, tv.tv_usec, state);
+			printf("%lu.%06lu: %d\n", tv.tv_sec, tv.tv_usec, state != 0);
 		}
 
 		last = state;
-	}
+	} while (ioctl(fd, TIOCMIWAIT, SERIO_IN) == 0);
 	cerror("Failed to close serial device", close(fd));
-	xerror("Failed to wait for pulse");
+	xerror("Failed to get serial IO status");
 }

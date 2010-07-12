@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Wextra -O2
+CFLAGS=-Wall -Wextra -Wshadow -O2
 .PHONY: all clean
 all: pulsemon
 clean:
