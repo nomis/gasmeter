@@ -1,64 +1,39 @@
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <mqueue.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <termios.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "pulsemon.h"
 
-#define tv_to_ull(x) (unsigned long long)((unsigned long long)(x).tv_sec*1000000 + (unsigned long long)(x).tv_usec)
-
-/* Some code copied from taylor-uucp. */
-
-#define ICLEAR_IFLAG (BRKINT | ICRNL | IGNBRK | IGNCR | IGNPAR \
-	| INLCR | INPCK | ISTRIP | IXOFF | IXON \
-	| PARMRK | IMAXBEL)
-#define ICLEAR_OFLAG (OPOST)
-#define ICLEAR_CFLAG (CSIZE | PARENB | PARODD | HUPCL)
-#define ISET_CFLAG (CS8 | CREAD | CLOCAL)
-#define ICLEAR_LFLAG (ECHO | ECHOE | ECHOK | ECHONL | ICANON | IEXTEN \
-	| ISIG | NOFLSH | TOSTOP | PENDIN | CRTSCTS)
-
-/* ---- */
-
 int main(int argc, char *argv[]) {
-	int fd, state, last, iflags;
-	struct termios ios;
+	int fd, state, last, len;
+	struct mq_attr q_attr = {
+		mq_flags: O_NONBLOCK,
+		mq_maxmsg: 4096,
+		mq_msgsize: sizeof(pulse_t)
+	};
+	char q_name[257];
+	pulse_t pulse;
+	mqd_t q;
 #if 0
 	pid_t pid;
 #endif
 
-	if (argc != 2) {
-		printf("Usage: %s <device>\n", argv[0]);
+	if (argc != 3) {
+		printf("Usage: %s <device> <meter>\n", argv[0]);
 		return 1;
 	}
 
 	fd = open(argv[1], O_RDONLY|O_NONBLOCK);
 	cerror(argv[1], fd < 0);
-
-	iflags = fcntl(fd, F_GETFL, 0);
-	cerror("Failed to get file descriptor flags for opened serial port", iflags < 0);
-	iflags &= ~(O_NONBLOCK|O_NDELAY);
-	iflags = fcntl(fd, F_SETFL, iflags);
-	cerror("Failed to set file descriptor flags", (iflags & O_NONBLOCK) != 0);
-	cerror("Failed to get terminal attributes", tcgetattr(fd, &ios));
-	
-	ios.c_iflag &=~ ICLEAR_IFLAG;
-	ios.c_oflag &=~ ICLEAR_OFLAG;
-	ios.c_cflag &=~ ICLEAR_CFLAG;
-	ios.c_cflag |= ISET_CFLAG;
-	ios.c_lflag &=~ ICLEAR_LFLAG;
-	ios.c_cc[VMIN] = 1;
-	ios.c_cc[VTIME] = 0;
-	cfsetispeed(&ios, B38400);
-	cfsetospeed(&ios, B38400);
-
-	cerror("Failed to flush terminal input", ioctl(fd, TCFLSH, 0) < 0);
-	cerror("Failed to set terminal attributes", tcsetattr(fd, TCSANOW, &ios));
 
 #if 0
 	cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
@@ -74,20 +49,29 @@ int main(int argc, char *argv[]) {
 	close(2);
 #endif
 
+	len = snprintf(q_name, sizeof(q_name), "/gasmeter_pulsemon_%zu_%lu", getuid(), strtoul(argv[2], NULL, 16));
+	cerror("Failed to create message queue name", len < 0);
+	cerror("Generated message queue name is too long", len > 255);
+
+	q = mq_open(q_name, O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &q_attr);
+	cerror(q_name, q < 0);
+
 	last = ~0;
 	do {
-		struct timeval tv;
-
 		cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
 		state &= SERIO_IN;
 
 		if (last != state) {
-			gettimeofday(&tv, NULL);
-			printf("%lu.%06lu: %d\n", tv.tv_sec, tv.tv_usec, state != 0);
+			gettimeofday(&pulse.tv, NULL);
+			pulse.on = (state != 0);
+#if 0
+			printf("%lu.%06lu: %d\n", pulse.tv.tv_sec, pulse.tv.tv_usec, pulse.on);
+#endif
+			mq_send(q, (const char *)&pulse, sizeof(pulse), 0);
 		}
 
 		last = state;
 	} while (ioctl(fd, TIOCMIWAIT, SERIO_IN) == 0);
 	cerror("Failed to close serial device", close(fd));
-	xerror("Failed to get serial IO status");
+	xerror("Failed to wait for serial IO status");
 }

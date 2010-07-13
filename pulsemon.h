@@ -8,5 +8,10 @@
 #define SERIO_OUT TIOCM_DTR
 #define SERIO_IN  TIOCM_DSR
 
+typedef struct {
+	struct timeval tv;
+	bool on;
+} __attribute__((__packed__)) pulse_t;
+
 #define xerror(msg) do { perror(msg); exit(EXIT_FAILURE); } while(0)
 #define cerror(msg, expr) do { if (expr) xerror(msg); } while(0)
