@@ -14,13 +14,12 @@
 #include "pulsemon.h"
 
 int main(int argc, char *argv[]) {
-	int fd, state, last, len;
+	int fd, state, last;
 	struct mq_attr q_attr = {
 		mq_flags: O_NONBLOCK,
 		mq_maxmsg: 4096,
 		mq_msgsize: sizeof(pulse_t)
 	};
-	char q_name[257];
 	pulse_t pulse;
 	mqd_t q;
 #if 0
@@ -28,7 +27,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 	if (argc != 3) {
-		printf("Usage: %s <device> <meter>\n", argv[0]);
+		printf("Usage: %s <device> <mqueue>\n", argv[0]);
 		return 1;
 	}
 
@@ -49,12 +48,8 @@ int main(int argc, char *argv[]) {
 	close(2);
 #endif
 
-	len = snprintf(q_name, sizeof(q_name), "/gasmeter_pulsemon_%zu_%lu", getuid(), strtoul(argv[2], NULL, 16));
-	cerror("Failed to create message queue name", len < 0);
-	cerror("Generated message queue name is too long", len > 255);
-
-	q = mq_open(q_name, O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &q_attr);
-	cerror(q_name, q < 0);
+	q = mq_open(argv[2], O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &q_attr);
+	cerror(argv[2], q < 0);
 
 	last = ~0;
 	do {
