@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "pulsemon.h"
+#include "pulseq.h"
 
 int main(int argc, char *argv[]) {
 	int fd, state, last;
