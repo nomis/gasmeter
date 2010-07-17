@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 	sigset_t die_signals;
 	pulse_t pulse[2];
 	mqd_t qmain, qbackup;
-#if 0
+#ifdef FORK
 	pid_t pid;
 #endif
 
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
 		free(backup);
 	}
 
-#if 0
+#ifdef FORK
 	pid = fork();
 	cerror("Failed to become a daemon", pid < 0);
 	if (pid)

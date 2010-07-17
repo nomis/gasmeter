@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
 	};
 	pulse_t pulse;
 	mqd_t q;
-#if 0
+#ifdef FORK
 	pid_t pid;
 #endif
 
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 	q = mq_open(argv[2], O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &q_attr);
 	cerror(argv[2], q < 0);
 
-#if 0
+#ifdef FORK
 	pid = fork();
 	cerror("Failed to become a daemon", pid < 0);
 	if (pid)
