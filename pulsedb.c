@@ -46,7 +46,6 @@ int main(int argc, char *argv[]) {
 	};
 	sigset_t die_signals;
 	pulse_t pulse[2];
-	char *backup;
 	mqd_t qmain, qbackup;
 #if 0
 	pid_t pid;
@@ -60,14 +59,18 @@ int main(int argc, char *argv[]) {
 	qmain = mq_open(argv[1], O_RDONLY|O_CREAT, S_IRUSR|S_IWUSR, &qmain_attr);
 	cerror(argv[1], qmain < 0);
 
-	backup = malloc(strlen(argv[1]) * sizeof(char) + 2);
-	cerror("malloc", backup == NULL);
+	{
+		char *backup = malloc(strlen(argv[1]) * sizeof(char) + 2);
+		cerror("malloc", backup == NULL);
 
-	ret = sprintf(backup, "%s~", argv[1]);
-	cerror("snprintf", ret < 0);
+		ret = sprintf(backup, "%s~", argv[1]);
+		cerror("snprintf", ret < 0);
 
-	qbackup = mq_open(backup, O_RDWR|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &qbackup_attr);
-	cerror(backup, qbackup < 0);
+		qbackup = mq_open(backup, O_RDWR|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &qbackup_attr);
+		cerror(backup, qbackup < 0);
+
+		free(backup);
+	}
 
 #if 0
 	pid = fork();
