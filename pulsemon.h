@@ -5,7 +5,7 @@
  *
  * TIOCMIWAIT on TIOCM_RNG only returns on the 1->0 transition
  */
-#define SERIO_OUT TIOCM_DTR
+#define SERIO_OUT 0
 #define SERIO_IN  TIOCM_DSR
 
 typedef struct {

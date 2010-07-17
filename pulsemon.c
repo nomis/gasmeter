@@ -34,9 +34,11 @@ int main(int argc, char *argv[]) {
 	fd = open(argv[1], O_RDONLY|O_NONBLOCK);
 	cerror(argv[1], fd < 0);
 
+#if SERIO_OUT != 0
 	cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
 	state |= SERIO_OUT;
 	cerror("Failed to set serial IO status", ioctl(fd, TIOCMSET, &state) != 0);
+#endif
 
 #if 0
 	pid = fork();
