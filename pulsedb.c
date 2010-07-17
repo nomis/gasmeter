@@ -178,7 +178,12 @@ int main(int argc, char *argv[]) {
 			 */
 			ret = mq_receive(qmain, (char *)&pulse[count], sizeof(pulse_t), 0);
 			if (ret != sizeof(pulse_t)) {
-				cerror("mq_receive main", errno != EINTR);
+				/* non-critical section:
+				 *
+				 * exit, possibly with interrupted status
+				 */
+				if (errno == 0)
+					errno = EIO; /* message size mismatch */
 				xerror("mq_receive main");
 			} else {
 				/* critical section:
