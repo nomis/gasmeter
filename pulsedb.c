@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 	cerror("sigaddset SIGTERM", sigaddset(&die_signals, SIGTERM) != 0);
 
 	sa_ign.sa_mask = die_signals;
-	sa_dfl.sa_mask = die_signals;
+	cerror("sigemptyset", sigemptyset(&sa_dfl.sa_mask) != 0);
 
 	qmain = mq_open(argv[1], O_RDONLY|O_CREAT, S_IRUSR|S_IWUSR, &qmain_attr);
 	cerror(argv[1], qmain < 0);
