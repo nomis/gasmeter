@@ -59,10 +59,10 @@ int main(int argc, char *argv[]) {
 	/* only need to care about intentional kills of
 	 * the process, as anything else is unrecoverable
 	 */
-	sigemptyset(&die_signals);
-	sigaddset(&die_signals, SIGINT);
-	sigaddset(&die_signals, SIGQUIT);
-	sigaddset(&die_signals, SIGTERM);
+	cerror("sigemptyset", sigemptyset(&die_signals) != 0);
+	cerror("sigaddset SIGINT", sigaddset(&die_signals, SIGINT) != 0);
+	cerror("sigaddset SIGQUIT", sigaddset(&die_signals, SIGQUIT) != 0);
+	cerror("sigaddset SIGTERM", sigaddset(&die_signals, SIGTERM) != 0);
 
 	sa_ign.sa_mask = die_signals;
 	sa_dfl.sa_mask = die_signals;
@@ -94,9 +94,10 @@ int main(int argc, char *argv[]) {
 #endif
 
 	/* critical section:
+	 *
 	 * block (hold) all signals
 	 */
-	sigprocmask(SIG_BLOCK, &die_signals, NULL);
+	cerror("sigprocmask SIG_BLOCK", sigprocmask(SIG_BLOCK, &die_signals, NULL) != 0);
 
 	/* read from backup queue */
 	while (count < 2) {
@@ -122,9 +123,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* non-critical section:
+	 *
 	 * unblock all signals (receive pending signals immediately)
 	 */
-	sigprocmask(SIG_UNBLOCK, &die_signals, NULL);
+	cerror("sigprocmask SIG_UNBLOCK", sigprocmask(SIG_UNBLOCK, &die_signals, NULL) != 0);
 
 	do {
 		_printf("main loop %d\n", count);
@@ -165,11 +167,12 @@ int main(int argc, char *argv[]) {
 			waiting_sig = 0;
 
 			/* managed section:
+			 *
 			 * handle signals, saving them for later
 			 */
-			sigaction(SIGINT, &sa_ign, NULL);
-			sigaction(SIGQUIT, &sa_ign, NULL);
-			sigaction(SIGTERM, &sa_ign, NULL);
+			cerror("sigaction SIGINT", sigaction(SIGINT, &sa_ign, NULL) != 0);
+			cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_ign, NULL) != 0);
+			cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_ign, NULL) != 0);
 
 			/* although the signal handler will stop
 			 * signals killing the process, this will
@@ -187,9 +190,17 @@ int main(int argc, char *argv[]) {
 				xerror("mq_receive main");
 			} else {
 				/* critical section:
+				 *
+				 * signals are currently handled, but
+				 * would cause mq_send to return EINTR
+				 *
 				 * block (hold) all signals
 				 */
-				sigprocmask(SIG_BLOCK, &die_signals, NULL);
+				ret = sigprocmask(SIG_BLOCK, &die_signals, NULL);
+				if (ret != 0) {
+					perror("sigprocmask SIG_BLOCK");
+					/* need to continue */
+				}
 
 				_printf("read %d %lu.%06lu %d from main queue\n", count, pulse[count].tv.tv_sec, pulse[count].tv.tv_usec, pulse[count].on);
 
@@ -226,17 +237,18 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* non-critical section:
+			 *
 			 * unblock all signals (receive pending signals immediately)
 			 * resume use of default signal handlers
 			 */
-			sigprocmask(SIG_UNBLOCK, &die_signals, NULL);
-			sigaction(SIGINT, &sa_dfl, NULL);
-			sigaction(SIGQUIT, &sa_dfl, NULL);
-			sigaction(SIGTERM, &sa_dfl, NULL);
+			cerror("sigprocmask SIG_UNBLOCK", sigprocmask(SIG_UNBLOCK, &die_signals, NULL) != 0);
+			cerror("sigaction SIGINT", sigaction(SIGINT, &sa_dfl, NULL) != 0);
+			cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_dfl, NULL) != 0);
+			cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_dfl, NULL) != 0);
 
 			/* resend first signal captured by signal handler */
 			if (waiting_sig != 0)
-				kill(getpid(), waiting_sig);
+				cerror("kill", kill(getpid(), waiting_sig) != 0);
 			break;
 		}
 	} while (1);
