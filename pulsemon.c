@@ -41,6 +41,9 @@ int main(int argc, char *argv[]) {
 	cerror("Failed to set serial IO status", ioctl(fd, TIOCMSET, &state) != 0);
 #endif
 
+	q = mq_open(argv[2], O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &q_attr);
+	cerror(argv[2], q < 0);
+
 #if 0
 	pid = fork();
 	cerror("Failed to become a daemon", pid < 0);
@@ -50,9 +53,6 @@ int main(int argc, char *argv[]) {
 	close(1);
 	close(2);
 #endif
-
-	q = mq_open(argv[2], O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &q_attr);
-	cerror(argv[2], q < 0);
 
 	last = ~0;
 	do {
