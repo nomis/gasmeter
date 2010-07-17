@@ -17,7 +17,7 @@
 int main(int argc, char *argv[]) {
 	int fd, state, last;
 	struct mq_attr q_attr = {
-		mq_flags: O_NONBLOCK,
+		mq_flags: 0,
 		mq_maxmsg: 4096,
 		mq_msgsize: sizeof(pulse_t)
 	};
@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
 
 	if (argc != 3) {
 		printf("Usage: %s <device> <mqueue>\n", argv[0]);
-		return 1;
+		exit(EXIT_FAILURE);
 	}
 
 	fd = open(argv[1], O_RDONLY|O_NONBLOCK);
@@ -62,9 +62,7 @@ int main(int argc, char *argv[]) {
 		if (last != state) {
 			gettimeofday(&pulse.tv, NULL);
 			pulse.on = (state != 0);
-#if 0
-			printf("%lu.%06lu: %d\n", pulse.tv.tv_sec, pulse.tv.tv_usec, pulse.on);
-#endif
+			_printf("%lu.%06lu: %d\n", pulse.tv.tv_sec, pulse.tv.tv_usec, pulse.on);
 			mq_send(q, (const char *)&pulse, sizeof(pulse), 0);
 		}
 
