@@ -25,6 +25,10 @@ static bool db_connect(void) {
 		if (conn == NULL) {
 			return false;
 		} else {
+			res = PQprepare(conn, "pulse_exists", "SELECT NULL FROM pulses WHERE meter = $1 AND start = to_timestamp($2)", 2, NULL);
+			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
+			PQclear(res);
+
 			res = PQprepare(conn, "pulse_on", "INSERT INTO pulses (meter, start) VALUES($1, to_timestamp($2))", 2, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
@@ -59,6 +63,9 @@ static void db_disconnect(void) {
 	if (conn != NULL) {
 		PGresult *res;
 
+		res = PQexec(conn, "DEALLOCATE PREPARE pulse_exists");
+		PQclear(res);
+
 		res = PQexec(conn, "DEALLOCATE PREPARE pulse_on");
 		PQclear(res);
 
@@ -77,11 +84,28 @@ bool pulse_on(const struct timeval *on) {
 	PGresult *res;
 	char tmp[1][32];
 	const char *param[2] = { param_meter, tmp[0] };
+	bool done = false;
 
 	if (!db_connect())
 		return false;
 
 	sprintf(tmp[0], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
+
+	res = PQexecPrepared(conn, "pulse_exists", 2, param, NULL, NULL, 0);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+		_printf("pulse_exists: %s", PQerrorMessage(conn));
+
+		PQclear(res);
+		db_disconnect();
+		return false;
+	} else {
+		done = (PQntuples(res) > 0);
+
+		PQclear(res);
+	}
+
+	if (done)
+		return true;
 
 	res = PQexecPrepared(conn, "pulse_on", 2, param, NULL, NULL, 0);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
