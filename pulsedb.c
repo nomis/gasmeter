@@ -23,6 +23,24 @@ void handle_signal(int sig) {
 		waiting_sig = sig;
 }
 
+int backoff = 1;
+
+static bool __pulse_on(unsigned long int meter, const struct timeval *on, const struct timeval *off) {
+	(void)off;
+	return pulse_on(meter, on);
+}
+
+static void try(bool (*func)(unsigned long int meter, const struct timeval *, const struct timeval *), unsigned long int meter, const pulse_t *pulse) {
+	while (!func(meter, &pulse[0].tv, &pulse[1].tv)) {
+		sleep(backoff);
+
+		if (backoff < 256)
+			backoff <<= 1;
+	}
+
+	backoff = 1;
+}
+
 int main(int argc, char *argv[]) {
 	unsigned long int meter;
 	int ret, i, count = 0;
@@ -144,11 +162,11 @@ int main(int argc, char *argv[]) {
 			assert(!pulse[1].on);
 
 			if (process_on) {
-				/* TODO process on+off pulse */
 				_printf("process on+off pulse\n");
+				try(pulse_on_off, meter, pulse);
 			} else {
-				/* TODO process off pulse */
 				_printf("process off pulse\n");
+				try(pulse_off, meter, pulse);
 			}
 
 			/* clear backup queue */
@@ -163,8 +181,8 @@ int main(int argc, char *argv[]) {
 		case 1: /* pulse on */
 			assert(pulse[0].on);
 			if (process_on) {
-				/* TODO process on pulse */
 				_printf("process on pulse\n");
+				try(__pulse_on, meter, pulse);
 				process_on = false;
 			}
 
