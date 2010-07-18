@@ -25,7 +25,7 @@ void handle_signal(int sig) {
 
 int main(int argc, char *argv[]) {
 	int ret, i, count = 0;
-	bool process_on = 1;
+	bool process_on = true;
 	struct mq_attr qmain_attr = {
 		mq_flags: 0,
 		mq_maxmsg: 4096,
@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 			if (process_on) {
 				/* TODO process on pulse */
 				_printf("process on pulse\n");
-				process_on = 0;
+				process_on = false;
 			}
 
 		case 0: /* no data */
@@ -211,7 +211,7 @@ int main(int argc, char *argv[]) {
 						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
 
 						count++;
-						process_on = 1;
+						process_on = true;
 					} /* discard unknown off pulse */
 				} else {
 					if (!pulse[count].on) { /* matching off pulse */
@@ -231,7 +231,7 @@ int main(int argc, char *argv[]) {
 						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
 
 						pulse[0] = pulse[1];
-						process_on = 1;
+						process_on = true;
 					}
 				}
 			}
