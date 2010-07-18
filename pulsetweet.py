@@ -26,10 +26,25 @@ def listen(db):
 
 def wait_notify(db):
 	notify = db._cnx.getnotify()
+	if notify is None:
+		print("Listening...")
+
 	while notify is None:
-		select.select([db._cnx], [], [db._cnx])
-		notify = db._cnx.getnotify()
-	return notify
+		if db is None:
+			db = connect_db()
+
+		(r, w, e) = select.select([db._cnx], [], [db._cnx])
+
+		if len(e) > 0:
+			db.close()
+			db = None
+			time.sleep(5)
+			continue
+		else:
+			notify = db._cnx.getnotify()
+
+	print("Notified")
+	return db
 
 def tso(ts):
 	return datetime.datetime.strptime(ts, '%Y-%m-%d %H:%M:%S.%f+00')
@@ -85,15 +100,19 @@ def get_oauth_config(db, account):
 		return None
 	return (oauth.Consumer(data[CON_KEY], data[CON_SEC]), oauth.Token(data[ACC_TOK], data[ACC_SEC]))
 
+def connect_db():
+	print("Connecting to DB...")
+	db = pgdb.connect()
+	listen(db)
+	return db
+
 if len(sys.argv) != 3:
 	print("Usage: pulsetweet <meter> <account>")
 	sys.exit(EXIT_FAILURE)
 
 meter, account = sys.argv[1:]
 
-db = pgdb.connect()
-listen(db)
-
+db = connect_db()
 consumer, token = get_oauth_config(db, account)
 client = oauth.Client(consumer, token)
 
@@ -105,33 +124,67 @@ if last is not None and last < INTERVAL:
 	time.sleep(INTERVAL - last)
 
 while True:
-	print("Getting reading...")
-	reading = get_reading(db, meter)
-	print("Reading: {0}".format(reading))
-	if reading is not None:
-		if tweet_update(db, account, reading["ts"]):
-			tweet = "{0:08.2f} m³ ({1:04.2f} m³/hr)".format(reading["value"], float(reading["step"]) / reading["delta"] * 3600)
-			print("[{0}] {1}".format(reading["ts"], tweet))
+	try:
+		if db is None:
+			db = connect_db()
 
-			resp, content = client.request("https://twitter.com/statuses/update.json", "POST", "status=" + urllib.quote(tweet))
-			status = resp["status"] if resp is not None and "status" in resp else None
-			print("Status {0}".format(status))
-
-			data = json.loads(content)
-			id = data["id"] if data is not None and "id" in data else None
-			print("ID {0}".format(id))
-
-			syslog.syslog("{0} {1} [{2}] {3}".format(tweet, reading["ts"], status, id))
-
-			if status == "200":
-				db.commit()
+		print("Getting reading...")
+		reading = get_reading(db, meter)
+	
+		print("Reading: {0}".format(reading))
+		if reading is not None:
+			if tweet_update(db, account, reading["ts"]):
+				tweet = "{0:08.2f} m³ ({1:04.2f} m³/hr)".format(reading["value"], float(reading["step"]) / reading["delta"] * 3600)
+				print("[{0}] {1}".format(reading["ts"], tweet))
+	
+				ok = False
+				status = None
+				id = None
+				err = []
+				try:
+					resp, content = client.request("https://twitter.com/statuses/update.json", "POST", "status=" + urllib.quote(tweet))
+				except Exception, e:
+					err = [e]
+				else:
+					if resp is not None and "status" in resp:
+						status = resp["status"]
+					print("Status {0}".format(status))
+	
+					if status == "200":
+						ok = True
+					else:
+						err = [resp]
+	
+					try:
+						data = json.loads(content)
+					except Exception, e:
+						err = [resp, content, e]
+					else:
+						if data is not None and "id" in data:
+							id = data["id"]
+	
+				syslog.syslog("{0} {1} [{2}] {3}".format(tweet, reading["ts"], status, id))
+				for msg in err:
+					syslog.syslog("  {0}".msg)
+	
+				sleep = INTERVAL
+				if ok:
+					db.commit()
+				else:
+					sleep = sleep * 10
+					db.rollback()
+	
+				print("Waiting {0}s".format(sleep))
+				time.sleep(sleep)
+	
+				if not ok:
+					continue
 			else:
-				db.rollback()
-
-			print("Waiting {0}s".format(INTERVAL))
-			time.sleep(INTERVAL)
+				db.commit()
 		else:
 			db.commit()
-	else:
-		db.commit()
-	wait_notify(db)
+		db = wait_notify(db)
+	except pg.DatabaseError, e:
+		print(e)
+		db = None
+		time.sleep(5)
