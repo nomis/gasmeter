@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "pulsedb.h"
+#include "pulsedb_postgres.h"
 
 PGconn *conn = NULL;
 char param_meter[32];
