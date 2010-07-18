@@ -85,6 +85,7 @@ int main(int argc, char *argv[]) {
 	 * the process, as anything else is unrecoverable
 	 */
 	cerror("sigemptyset", sigemptyset(&die_signals) != 0);
+	cerror("sigaddset SIGHUP", sigaddset(&die_signals, SIGHUP) != 0);
 	cerror("sigaddset SIGINT", sigaddset(&die_signals, SIGINT) != 0);
 	cerror("sigaddset SIGQUIT", sigaddset(&die_signals, SIGQUIT) != 0);
 	cerror("sigaddset SIGTERM", sigaddset(&die_signals, SIGTERM) != 0);
@@ -195,6 +196,7 @@ int main(int argc, char *argv[]) {
 			 *
 			 * handle signals, saving them for later
 			 */
+			cerror("sigaction SIGHUP", sigaction(SIGHUP, &sa_ign, NULL) != 0);
 			cerror("sigaction SIGINT", sigaction(SIGINT, &sa_ign, NULL) != 0);
 			cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_ign, NULL) != 0);
 			cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_ign, NULL) != 0);
@@ -267,6 +269,7 @@ int main(int argc, char *argv[]) {
 			 * resume use of default signal handlers
 			 */
 			cerror("sigprocmask SIG_UNBLOCK", sigprocmask(SIG_UNBLOCK, &die_signals, NULL) != 0);
+			cerror("sigaction SIGHUP", sigaction(SIGHUP, &sa_dfl, NULL) != 0);
 			cerror("sigaction SIGINT", sigaction(SIGINT, &sa_dfl, NULL) != 0);
 			cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_dfl, NULL) != 0);
 			cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_dfl, NULL) != 0);
