@@ -132,6 +132,22 @@ bool pulse_on_off(const struct timeval *on, const struct timeval *off) {
 	sprintf(tmp[0], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
 	sprintf(tmp[1], "%lu.%06u", (unsigned long int)off->tv_sec, (unsigned int)off->tv_usec);
 
+	res = PQexecPrepared(conn, "pulse_off", 3, param, NULL, NULL, 0);
+	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+		_printf("pulse_off: %s", PQerrorMessage(conn));
+
+		PQclear(res);
+		db_disconnect();
+		return false;
+	} else {
+		done = strcmp("0", PQcmdTuples(res));
+
+		PQclear(res);
+	}
+
+	if (done)
+		return true;
+
 	res = PQexecPrepared(conn, "pulse_on_off", 3, param, NULL, NULL, 0);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
 		_printf("pulse_on_off: %s", PQerrorMessage(conn));
