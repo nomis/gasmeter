@@ -24,6 +24,7 @@ void handle_signal(int sig) {
 }
 
 int main(int argc, char *argv[]) {
+	unsigned long int meter;
 	int ret, i, count = 0;
 	bool process_on = true;
 	struct mq_attr qmain_attr = {
@@ -55,6 +56,10 @@ int main(int argc, char *argv[]) {
 		printf("Usage: %s <mqueue> <meter>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
+
+	errno = 0;
+	meter = strtoul(argv[2], NULL, 10);
+	cerror(argv[2], errno != 0);
 
 	/* only need to care about intentional kills of
 	 * the process, as anything else is unrecoverable
