@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
 			cerror("mq_receive backup", errno != EAGAIN);
 			break;
 		} else {
-			_printf("read %d %lu.%06lu %d from backup queue\n", count, pulse[count].tv.tv_sec, pulse[count].tv.tv_usec, pulse[count].on);
+			_printf("read %d %lu.%06u %d from backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
 			count++;
 		}
 	}
@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
 	for (i = count - 1; i >= 0; i--) {
 		ret = mq_send(qbackup, (char *)&pulse[i], sizeof(pulse_t), 0);
 		cerror("mq_send backup", ret != 0);
-		_printf("wrote %d %lu.%06lu %d to backup queue\n", i, pulse[i].tv.tv_sec, pulse[i].tv.tv_usec, pulse[i].on);
+		_printf("wrote %d %lu.%06u %d to backup queue\n", i, (unsigned long int)pulse[i].tv.tv_sec, (unsigned int)pulse[i].tv.tv_usec, pulse[i].on);
 	}
 
 	/* non-critical section:
@@ -202,13 +202,13 @@ int main(int argc, char *argv[]) {
 					/* need to continue */
 				}
 
-				_printf("read %d %lu.%06lu %d from main queue\n", count, pulse[count].tv.tv_sec, pulse[count].tv.tv_usec, pulse[count].on);
+				_printf("read %d %lu.%06u %d from main queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
 
 				if (count == 0) {
 					if (pulse[count].on) { /* new on pulse */
 						ret = mq_send(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
 						cerror("mq_send backup", ret != 0);
-						_printf("wrote %d %lu.%06lu %d to backup queue\n", count, pulse[count].tv.tv_sec, pulse[count].tv.tv_usec, pulse[count].on);
+						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
 
 						count++;
 						process_on = 1;
@@ -217,7 +217,7 @@ int main(int argc, char *argv[]) {
 					if (!pulse[count].on) { /* matching off pulse */
 						ret = mq_send(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
 						cerror("mq_send backup", ret != 0);
-						_printf("wrote %d %lu.%06lu %d to backup queue\n", count, pulse[count].tv.tv_sec, pulse[count].tv.tv_usec, pulse[count].on);
+						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
 
 						count++;
 					} else { /* duplicate on pulse */
@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
 
 						ret = mq_send(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
 						cerror("mq_send backup", ret != 0);
-						_printf("wrote %d %lu.%06lu %d to backup queue\n", count, pulse[count].tv.tv_sec, pulse[count].tv.tv_usec, pulse[count].on);
+						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
 
 						pulse[0] = pulse[1];
 						process_on = 1;

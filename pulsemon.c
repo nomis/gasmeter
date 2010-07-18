@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
 		if (last != state) {
 			gettimeofday(&pulse.tv, NULL);
 			pulse.on = (state != 0);
-			_printf("%lu.%06lu: %d\n", pulse.tv.tv_sec, pulse.tv.tv_usec, pulse.on);
+			_printf("%lu.%06u: %d\n", (unsigned long int)pulse.tv.tv_sec, (unsigned int)pulse.tv.tv_usec, pulse.on);
 			mq_send(q, (const char *)&pulse, sizeof(pulse), 0);
 		}
 
