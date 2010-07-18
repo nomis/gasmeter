@@ -3,7 +3,7 @@ LDFLAGS=-lrt -lpq
 .PHONY: all clean
 all: pulsemon pulsedb
 clean:
-	rm -f pulsemon pulseb
+	rm -f pulsemon pulsedb
 
 pulsemon: pulsemon.c pulsemon.h pulseq.h Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
