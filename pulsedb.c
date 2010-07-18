@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
 		count = 0;
 
 	/* write to backup queue */
-	for (i = count - 1; i >= 0; i--) {
+	for (i = 0; i < count; i++) {
 		ret = mq_send(qbackup, (char *)&pulse[i], sizeof(pulse_t), 0);
 		cerror("mq_send backup", ret != 0);
 		_printf("wrote %d %lu.%06u %d to backup queue\n", i, (unsigned long int)pulse[i].tv.tv_sec, (unsigned int)pulse[i].tv.tv_usec, pulse[i].on);
