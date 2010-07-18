@@ -25,13 +25,13 @@ void handle_signal(int sig) {
 
 int backoff = 1;
 
-static bool __pulse_on(unsigned long int meter, const struct timeval *on, const struct timeval *off) {
+static bool __pulse_on(const struct timeval *on, const struct timeval *off) {
 	(void)off;
-	return pulse_on(meter, on);
+	return pulse_on(on);
 }
 
-static void try(bool (*func)(unsigned long int meter, const struct timeval *, const struct timeval *), unsigned long int meter, const pulse_t *pulse) {
-	while (!func(meter, &pulse[0].tv, &pulse[1].tv)) {
+static void try(bool (*func)(const struct timeval *, const struct timeval *), const pulse_t *pulse) {
+	while (!func(&pulse[0].tv, &pulse[1].tv)) {
 		sleep(backoff);
 
 		if (backoff < 256)
@@ -78,6 +78,8 @@ int main(int argc, char *argv[]) {
 	errno = 0;
 	meter = strtoul(argv[2], NULL, 10);
 	cerror(argv[2], errno != 0);
+
+	pulse_meter(meter);
 
 	/* only need to care about intentional kills of
 	 * the process, as anything else is unrecoverable
@@ -163,10 +165,10 @@ int main(int argc, char *argv[]) {
 
 			if (process_on) {
 				_printf("process on+off pulse\n");
-				try(pulse_on_off, meter, pulse);
+				try(pulse_on_off, pulse);
 			} else {
 				_printf("process off pulse\n");
-				try(pulse_off, meter, pulse);
+				try(pulse_off, pulse);
 			}
 
 			/* clear backup queue */
@@ -182,7 +184,7 @@ int main(int argc, char *argv[]) {
 			assert(pulse[0].on);
 			if (process_on) {
 				_printf("process on pulse\n");
-				try(__pulse_on, meter, pulse);
+				try(__pulse_on, pulse);
 				process_on = false;
 			}
 

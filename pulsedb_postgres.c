@@ -1,10 +1,20 @@
 #include <sys/time.h>
 #include <libpq-fe.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "pulsedb.h"
 
 PGconn *conn = NULL;
+char param_meter[32];
+
+void pulse_meter(unsigned long int meter) {
+	int ret;
+
+	ret = sprintf(param_meter, "%lu", meter);
+	cerror("sprintf", ret < 0);
+}
 
 static bool db_connect(void) {
 	PGresult *res = NULL;
@@ -63,16 +73,15 @@ static void db_disconnect(void) {
 	}
 }
 
-bool pulse_on(unsigned long int meter, const struct timeval *on) {
+bool pulse_on(const struct timeval *on) {
 	PGresult *res;
-	char tmp[2][32];
-	const char *param[2] = { tmp[0], tmp[1] };
+	char tmp[1][32];
+	const char *param[2] = { param_meter, tmp[0] };
 
 	if (!db_connect())
 		return false;
 
-	sprintf(tmp[0], "%lu", meter);
-	sprintf(tmp[1], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
+	sprintf(tmp[0], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
 
 	res = PQexecPrepared(conn, "pulse_on", 2, param, NULL, NULL, 0);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
@@ -87,17 +96,16 @@ bool pulse_on(unsigned long int meter, const struct timeval *on) {
 	}
 }
 
-bool pulse_off(unsigned long int meter, const struct timeval *on, const struct timeval *off) {
+bool pulse_off(const struct timeval *on, const struct timeval *off) {
 	PGresult *res;
-	char tmp[3][32];
-	const char *param[3] = { tmp[0], tmp[1], tmp[2] };
+	char tmp[2][32];
+	const char *param[3] = { param_meter, tmp[0], tmp[1] };
 
 	if (!db_connect())
 		return false;
 
-	sprintf(tmp[0], "%lu", meter);
-	sprintf(tmp[1], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
-	sprintf(tmp[2], "%lu.%06u", (unsigned long int)off->tv_sec, (unsigned int)off->tv_usec);
+	sprintf(tmp[0], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
+	sprintf(tmp[1], "%lu.%06u", (unsigned long int)off->tv_sec, (unsigned int)off->tv_usec);
 
 	res = PQexecPrepared(conn, "pulse_off", 3, param, NULL, NULL, 0);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
@@ -112,17 +120,17 @@ bool pulse_off(unsigned long int meter, const struct timeval *on, const struct t
 	}
 }
 
-bool pulse_on_off(unsigned long int meter, const struct timeval *on, const struct timeval *off) {
+bool pulse_on_off(const struct timeval *on, const struct timeval *off) {
 	PGresult *res;
-	char tmp[3][32];
-	const char *param[3] = { tmp[0], tmp[1], tmp[2] };
+	char tmp[2][32];
+	const char *param[3] = { param_meter, tmp[0], tmp[1] };
+	bool done = false;
 
 	if (!db_connect())
 		return false;
 
-	sprintf(tmp[0], "%lu", meter);
-	sprintf(tmp[1], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
-	sprintf(tmp[2], "%lu.%06u", (unsigned long int)off->tv_sec, (unsigned int)off->tv_usec);
+	sprintf(tmp[0], "%lu.%06u", (unsigned long int)on->tv_sec, (unsigned int)on->tv_usec);
+	sprintf(tmp[1], "%lu.%06u", (unsigned long int)off->tv_sec, (unsigned int)off->tv_usec);
 
 	res = PQexecPrepared(conn, "pulse_on_off", 3, param, NULL, NULL, 0);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {

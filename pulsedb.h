@@ -11,6 +11,7 @@
 # define _printf(...) do { } while(0)
 #endif
 
-bool pulse_on(unsigned long int meter, const struct timeval *on);
-bool pulse_off(unsigned long int meter, const struct timeval *on, const struct timeval *off);
-bool pulse_on_off(unsigned long int meter, const struct timeval *on, const struct timeval *off);
+void pulse_meter(unsigned long int meter);
+bool pulse_on(const struct timeval *on);
+bool pulse_off(const struct timeval *on, const struct timeval *off);
+bool pulse_on_off(const struct timeval *on, const struct timeval *off);
