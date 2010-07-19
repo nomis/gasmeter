@@ -30,21 +30,10 @@ def wait_notify(db):
 		print("Listening...")
 
 	while notify is None:
-		if db is None:
-			db = connect_db()
-
-		(r, w, e) = select.select([db._cnx], [], [db._cnx])
-
-		if len(e) > 0:
-			db.close()
-			db = None
-			time.sleep(5)
-			continue
-		else:
-			notify = db._cnx.getnotify()
+		select.select([db._cnx], [], [db._cnx])
+		notify = db._cnx.getnotify()
 
 	print("Notified")
-	return db
 
 def tso(ts):
 	return datetime.datetime.strptime(ts, '%Y-%m-%d %H:%M:%S.%f+00')
@@ -183,8 +172,12 @@ while True:
 				db.commit()
 		else:
 			db.commit()
-		db = wait_notify(db)
+		wait_notify(db)
 	except pg.DatabaseError, e:
 		print(e)
+		try:
+			db.close()
+		except pg.DatabaseError:
+			pass
 		db = None
 		time.sleep(5)
