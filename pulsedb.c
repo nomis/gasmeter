@@ -23,22 +23,20 @@ void handle_signal(int sig) {
 		waiting_sig = sig;
 }
 
-int backoff = 1;
-
 static bool __pulse_on(const struct timeval *on, const struct timeval *off) {
 	(void)off;
 	return pulse_on(on);
 }
 
 static void try(bool (*func)(const struct timeval *, const struct timeval *), const pulse_t *pulse) {
+	int backoff = 1;
+
 	while (!func(&pulse[0].tv, &pulse[1].tv)) {
 		sleep(backoff);
 
 		if (backoff < 256)
 			backoff <<= 1;
 	}
-
-	backoff = 1;
 }
 
 int main(int argc, char *argv[]) {
