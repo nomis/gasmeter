@@ -16,69 +16,54 @@
 #include "pulsedb.h"
 #include "pulseq.h"
 
-int waiting_sig;
+char *mqueue_main;
+char *mqueue_backup;
+unsigned long int meter;
+mqd_t qmain, qbackup;
+bool process_on = true;
+pulse_t pulse[2];
+int count = 0;
+
+void handle_signal(int sig);
+
+struct sigaction sa_ign = { /* handle signals, but store them for later */
+	sa_handler: handle_signal,
+	sa_flags: 0
+};
+struct sigaction sa_dfl = { /* use default signal handler */
+	sa_handler: SIG_DFL,
+	sa_flags: 0
+};
+sigset_t die_signals;
+int waiting_sig = 0;
 
 void handle_signal(int sig) {
 	if (waiting_sig == 0)
 		waiting_sig = sig;
 }
 
-static bool __pulse_on(const struct timeval *on, const struct timeval *off) {
-	(void)off;
-	return pulse_on(on);
-}
-
-static void try(bool (*func)(const struct timeval *, const struct timeval *), const pulse_t *pulse) {
-	int backoff = 1;
-
-	while (!func(&pulse[0].tv, &pulse[1].tv)) {
-		sleep(backoff);
-
-		if (backoff < 256)
-			backoff <<= 1;
-	}
-}
-
-int main(int argc, char *argv[]) {
-	unsigned long int meter;
-	int ret, i, count = 0;
-	bool process_on = true;
-	struct mq_attr qmain_attr = {
-		mq_flags: 0,
-		mq_maxmsg: 4096,
-		mq_msgsize: sizeof(pulse_t)
-	};
-	struct mq_attr qbackup_attr = {
-		mq_flags: 0,
-		mq_maxmsg: 2,
-		mq_msgsize: sizeof(pulse_t)
-	};
-	struct sigaction sa_ign = { /* handle signals, but store them for later */
-		sa_handler: handle_signal,
-		sa_flags: 0
-	};
-	struct sigaction sa_dfl = { /* use default signal handler */
-		sa_handler: SIG_DFL,
-		sa_flags: 0
-	};
-	sigset_t die_signals;
-	pulse_t pulse[2];
-	mqd_t qmain, qbackup;
-#ifdef FORK
-	pid_t pid;
-#endif
+static void setup(int argc, char *argv[]) {
+	int ret;
 
 	if (argc != 3) {
 		printf("Usage: %s <mqueue> <meter>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
+	mqueue_main = argv[1];
+
+	mqueue_backup = malloc(strlen(mqueue_main) * sizeof(char) + 2);
+	cerror("malloc", mqueue_backup == NULL);
+
+	ret = sprintf(mqueue_backup, "%s~", mqueue_main);
+	cerror("snprintf", ret < 0);
+
 	errno = 0;
 	meter = strtoul(argv[2], NULL, 10);
 	cerror(argv[2], errno != 0);
+}
 
-	pulse_meter(meter);
-
+static void signal_init(void) {
 	/* only need to care about intentional kills of
 	 * the process, as anything else is unrecoverable
 	 */
@@ -90,25 +75,98 @@ int main(int argc, char *argv[]) {
 
 	sa_ign.sa_mask = die_signals;
 	cerror("sigemptyset", sigemptyset(&sa_dfl.sa_mask) != 0);
+}
 
-	qmain = mq_open(argv[1], O_RDONLY|O_CREAT, S_IRUSR|S_IWUSR, &qmain_attr);
-	cerror(argv[1], qmain < 0);
+static void init(void) {
+	struct mq_attr qmain_attr = {
+		mq_flags: 0,
+		mq_maxmsg: 4096,
+		mq_msgsize: sizeof(pulse_t)
+	};
+	struct mq_attr qbackup_attr = {
+		mq_flags: 0,
+		mq_maxmsg: 2,
+		mq_msgsize: sizeof(pulse_t)
+	};
 
-	{
-		char *backup = malloc(strlen(argv[1]) * sizeof(char) + 2);
-		cerror("malloc", backup == NULL);
+	qmain = mq_open(mqueue_main, O_RDONLY|O_CREAT, S_IRUSR|S_IWUSR, &qmain_attr);
+	cerror(mqueue_main, qmain < 0);
 
-		ret = sprintf(backup, "%s~", argv[1]);
-		cerror("snprintf", ret < 0);
+	qbackup = mq_open(mqueue_backup, O_RDWR|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &qbackup_attr);
+	cerror(mqueue_backup, qbackup < 0);
 
-		qbackup = mq_open(backup, O_RDWR|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &qbackup_attr);
-		cerror(backup, qbackup < 0);
+	signal_init();
+	pulse_meter(meter);
+}
 
-		free(backup);
+static void signal_hold(void) {
+	cerror("sigprocmask SIG_BLOCK", sigprocmask(SIG_BLOCK, &die_signals, NULL) != 0);
+}
+
+static void try_signal_hold(void) {
+	int ret = sigprocmask(SIG_BLOCK, &die_signals, NULL);
+	if (ret != 0) {
+		perror("sigprocmask SIG_BLOCK");
+		/* need to continue */
+	}
+}
+static void signal_dispatch(void) {
+	cerror("sigprocmask SIG_UNBLOCK", sigprocmask(SIG_UNBLOCK, &die_signals, NULL) != 0);
+}
+
+static void backup_pulse(void) {
+	int ret = mq_send(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
+	cerror("mq_send backup", ret != 0);
+	_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
+}
+
+static void backup_clear(void) {
+	_printf("clearing backup queue\n");
+	while (count > 0) {
+		int ret = mq_receive(qbackup, (char *)&pulse[--count], sizeof(pulse_t), 0);
+		cerror("mq_receive backup", ret != sizeof(pulse_t));
+	}	
+}
+
+static void backup_load(void) {
+	int ret, loaded = 0;
+
+	/* critical section:
+	 *
+	 * block (hold) all signals
+	 */
+	signal_hold();
+
+	/* read from backup queue */
+	while (loaded < 2) {
+		ret = mq_receive(qbackup, (char *)&pulse[loaded], sizeof(pulse_t), 0);
+		if (ret != sizeof(pulse_t)) {
+			cerror("mq_receive backup", errno != EAGAIN);
+			break;
+		} else {
+			_printf("read %d %lu.%06u %d from backup queue\n", loaded, (unsigned long int)pulse[loaded].tv.tv_sec, (unsigned int)pulse[loaded].tv.tv_usec, pulse[loaded].on);
+			loaded++;
+		}
 	}
 
+	/* discard unknown off pulse */
+	if (loaded == 1 && !pulse[0].on)
+		loaded = 0;
+
+	/* write to backup queue */
+	for (count = 0; count < loaded; count++)
+		backup_pulse();
+
+	/* non-critical section:
+	 *
+	 * unblock all signals (receive pending signals immediately)
+	 */
+	signal_dispatch();
+}
+
+static void daemon(void) {
 #ifdef FORK
-	pid = fork();
+	pid_t pid = fork();
 	cerror("Failed to become a daemon", pid < 0);
 	if (pid)
 		exit(EXIT_SUCCESS);
@@ -116,42 +174,137 @@ int main(int argc, char *argv[]) {
 	close(1);
 	close(2);
 #endif
+}
 
-	/* critical section:
-	 *
-	 * block (hold) all signals
-	 */
-	cerror("sigprocmask SIG_BLOCK", sigprocmask(SIG_BLOCK, &die_signals, NULL) != 0);
+static bool __pulse_on(const struct timeval *on, const struct timeval *off) {
+	(void)off;
+	return pulse_on(on);
+}
 
-	/* read from backup queue */
-	while (count < 2) {
-		ret = mq_receive(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
-		if (ret != sizeof(pulse_t)) {
-			cerror("mq_receive backup", errno != EAGAIN);
-			break;
-		} else {
-			_printf("read %d %lu.%06u %d from backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
-			count++;
-		}
+static void save(bool (*func)(const struct timeval *, const struct timeval *)) {
+	int backoff = 1;
+
+	while (!func(&pulse[0].tv, &pulse[1].tv)) {
+		sleep(backoff);
+
+		if (backoff < 256)
+			backoff <<= 1;
+	}
+}
+
+static void save_off(void) {
+	assert(pulse[0].on);
+	assert(!pulse[1].on);
+
+	if (process_on) {
+		_printf("process on+off pulse\n");
+		save(pulse_on_off);
+	} else {
+		_printf("process off pulse\n");
+		save(pulse_off);
 	}
 
-	/* discard unknown off pulse */
-	if (count == 1 && !pulse[0].on)
-		count = 0;
+	backup_clear();
+}
 
-	/* write to backup queue */
-	for (i = 0; i < count; i++) {
-		ret = mq_send(qbackup, (char *)&pulse[i], sizeof(pulse_t), 0);
-		cerror("mq_send backup", ret != 0);
-		_printf("wrote %d %lu.%06u %d to backup queue\n", i, (unsigned long int)pulse[i].tv.tv_sec, (unsigned int)pulse[i].tv.tv_usec, pulse[i].on);
+static void save_on(void) {
+	assert(pulse[0].on);
+
+	if (process_on) {
+		_printf("process on pulse\n");
+		save(__pulse_on);
+		process_on = false;
+	}
+}
+
+static void handle_pulse(void) {
+	if (count == 0) {
+		/* no data */
+		if (pulse[count].on) { /* new on pulse */
+			backup_pulse();
+
+			count++;
+			process_on = true;
+		} else { /* discard unknown off pulse */ }
+	} else {
+		/* on pulse waiting for off pulse */
+		assert(count == 1);
+
+		if (!pulse[count].on) { /* matching off pulse */
+			backup_pulse();
+
+			count++;
+		} else { /* duplicate on pulse */
+			backup_clear();
+			backup_pulse();
+
+			pulse[0] = pulse[1];
+			process_on = true;
+		}
+	}
+}
+
+static void signal_capture(void) {
+	cerror("sigaction SIGHUP", sigaction(SIGHUP, &sa_ign, NULL) != 0);
+	cerror("sigaction SIGINT", sigaction(SIGINT, &sa_ign, NULL) != 0);
+	cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_ign, NULL) != 0);
+	cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_ign, NULL) != 0);
+}
+
+static void signal_release(void) {
+	cerror("sigaction SIGHUP", sigaction(SIGHUP, &sa_dfl, NULL) != 0);
+	cerror("sigaction SIGINT", sigaction(SIGINT, &sa_dfl, NULL) != 0);
+	cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_dfl, NULL) != 0);
+	cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_dfl, NULL) != 0);
+}
+
+static void get_data(void) {
+	int ret;
+
+	/* managed section:
+	*
+	* handle signals, saving them for later
+	*/
+	signal_capture();
+
+	/* although the signal handler will stop
+	* signals killing the process, this will
+	* return EINTR allowing it to be killed
+	* in this non-critical section
+	*/
+	ret = mq_receive(qmain, (char *)&pulse[count], sizeof(pulse_t), 0);
+	if (ret != sizeof(pulse_t)) {
+		/* non-critical section:
+		*
+		* exit, possibly with interrupted status
+		*/
+		if (errno == 0)
+			errno = EIO; /* message size mismatch */
+		xerror("mq_receive main");
+	} else {
+		/* critical section:
+		*
+		* signals are currently handled, but
+		* would cause mq_send to return EINTR
+		*
+		* block (hold) all signals
+		*/
+		try_signal_hold();
+
+		_printf("read %d %lu.%06u %d from main queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
+		handle_pulse();
 	}
 
 	/* non-critical section:
-	 *
-	 * unblock all signals (receive pending signals immediately)
-	 */
-	cerror("sigprocmask SIG_UNBLOCK", sigprocmask(SIG_UNBLOCK, &die_signals, NULL) != 0);
+	*
+	* unblock all signals (receive pending signals immediately)
+	* resume use of default signal handlers
+	*/
+	signal_dispatch();
+	signal_release();
+}
 
+static void loop(void) {
 	do {
 		_printf("main loop %d\n", count);
 		assert(count >= 0);
@@ -159,124 +312,35 @@ int main(int argc, char *argv[]) {
 
 		switch (count) {
 		case 2: /* pulse on, pulse off */
-			assert(pulse[0].on);
-			assert(!pulse[1].on);
-
-			if (process_on) {
-				_printf("process on+off pulse\n");
-				try(pulse_on_off, pulse);
-			} else {
-				_printf("process off pulse\n");
-				try(pulse_off, pulse);
-			}
-
-			/* clear backup queue */
-			_printf("clearing backup queue\n");
-			ret = mq_receive(qbackup, (char *)&pulse[1], sizeof(pulse_t), 0);
-			cerror("mq_receive backup", ret != sizeof(pulse_t));
-			ret = mq_receive(qbackup, (char *)&pulse[0], sizeof(pulse_t), 0);
-			cerror("mq_receive backup", ret != sizeof(pulse_t));
-			count = 0;
+			save_off();
 			break;
 
 		case 1: /* pulse on */
-			assert(pulse[0].on);
-			if (process_on) {
-				_printf("process on pulse\n");
-				try(__pulse_on, pulse);
-				process_on = false;
-			}
+			save_on();
 
 		case 0: /* no data */
-			waiting_sig = 0;
-
-			/* managed section:
-			 *
-			 * handle signals, saving them for later
-			 */
-			cerror("sigaction SIGHUP", sigaction(SIGHUP, &sa_ign, NULL) != 0);
-			cerror("sigaction SIGINT", sigaction(SIGINT, &sa_ign, NULL) != 0);
-			cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_ign, NULL) != 0);
-			cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_ign, NULL) != 0);
-
-			/* although the signal handler will stop
-			 * signals killing the process, this will
-			 * return EINTR allowing it to be killed
-			 * in this non-critical section
-			 */
-			ret = mq_receive(qmain, (char *)&pulse[count], sizeof(pulse_t), 0);
-			if (ret != sizeof(pulse_t)) {
-				/* non-critical section:
-				 *
-				 * exit, possibly with interrupted status
-				 */
-				if (errno == 0)
-					errno = EIO; /* message size mismatch */
-				xerror("mq_receive main");
-			} else {
-				/* critical section:
-				 *
-				 * signals are currently handled, but
-				 * would cause mq_send to return EINTR
-				 *
-				 * block (hold) all signals
-				 */
-				ret = sigprocmask(SIG_BLOCK, &die_signals, NULL);
-				if (ret != 0) {
-					perror("sigprocmask SIG_BLOCK");
-					/* need to continue */
-				}
-
-				_printf("read %d %lu.%06u %d from main queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
-
-				if (count == 0) {
-					if (pulse[count].on) { /* new on pulse */
-						ret = mq_send(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
-						cerror("mq_send backup", ret != 0);
-						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
-
-						count++;
-						process_on = true;
-					} /* discard unknown off pulse */
-				} else {
-					if (!pulse[count].on) { /* matching off pulse */
-						ret = mq_send(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
-						cerror("mq_send backup", ret != 0);
-						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
-
-						count++;
-					} else { /* duplicate on pulse */
-						/* clear backup queue */
-						_printf("clearing backup queue\n");
-						ret = mq_receive(qbackup, (char *)&pulse[0], sizeof(pulse_t), 0);
-						cerror("mq_receive backup", ret != sizeof(pulse_t));
-
-						ret = mq_send(qbackup, (char *)&pulse[count], sizeof(pulse_t), 0);
-						cerror("mq_send backup", ret != 0);
-						_printf("wrote %d %lu.%06u %d to backup queue\n", count, (unsigned long int)pulse[count].tv.tv_sec, (unsigned int)pulse[count].tv.tv_usec, pulse[count].on);
-
-						pulse[0] = pulse[1];
-						process_on = true;
-					}
-				}
-			}
-
-			/* non-critical section:
-			 *
-			 * unblock all signals (receive pending signals immediately)
-			 * resume use of default signal handlers
-			 */
-			cerror("sigprocmask SIG_UNBLOCK", sigprocmask(SIG_UNBLOCK, &die_signals, NULL) != 0);
-			cerror("sigaction SIGHUP", sigaction(SIGHUP, &sa_dfl, NULL) != 0);
-			cerror("sigaction SIGINT", sigaction(SIGINT, &sa_dfl, NULL) != 0);
-			cerror("sigaction SIGQUIT", sigaction(SIGQUIT, &sa_dfl, NULL) != 0);
-			cerror("sigaction SIGTERM", sigaction(SIGTERM, &sa_dfl, NULL) != 0);
-
-			/* resend first signal captured by signal handler */
-			if (waiting_sig != 0)
-				cerror("kill", kill(getpid(), waiting_sig) != 0);
+			get_data();
 			break;
 		}
-	} while (1);
+	} while(waiting_sig == 0);
+
+	/* resend first signal captured by signal handler */
+	if (waiting_sig != 0)
+		cerror("kill", kill(getpid(), waiting_sig) != 0);
+}
+
+static void cleanup(void) {
+	cerror(mqueue_main, mq_close(qmain));
+	cerror(mqueue_backup, mq_close(qbackup));
+	free(mqueue_backup);
+}
+
+int main(int argc, char *argv[]) {
+	setup(argc, argv);
+	init();
+	backup_load();
+	daemon();
+	loop();
+	cleanup();
 	exit(EXIT_FAILURE);
 }
