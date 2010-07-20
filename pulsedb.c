@@ -58,9 +58,7 @@ static void setup(int argc, char *argv[]) {
 	ret = sprintf(mqueue_backup, "%s~", mqueue_main);
 	cerror("snprintf", ret < 0);
 
-	errno = 0;
-	meter = strtoul(argv[2], NULL, 10);
-	cerror(argv[2], errno != 0);
+	pulse_meter(argv[2]);
 }
 
 static void signal_init(void) {
@@ -96,7 +94,6 @@ static void init(void) {
 	cerror(mqueue_backup, qbackup < 0);
 
 	signal_init();
-	pulse_meter(meter);
 }
 
 static void signal_hold(void) {

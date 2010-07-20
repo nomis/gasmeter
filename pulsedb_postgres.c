@@ -1,4 +1,5 @@
 #include <sys/time.h>
+#include <errno.h>
 #include <libpq-fe.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -8,13 +9,22 @@
 #include "pulsedb_postgres.h"
 
 PGconn *conn = NULL;
-char param_meter[32];
+const char *meter;
 
-void pulse_meter(unsigned long int meter) {
-	int ret;
+void pulse_meter(const char *value) {
+	char *end = NULL;
 
-	ret = sprintf(param_meter, "%lu", meter);
-	cerror("sprintf", ret < 0);
+	errno = EINVAL;
+	cerror("Meter value cannot be empty", value[0] == '\0');
+
+	errno = 0;
+	strtol(value, &end, 10);
+	cerror(value, errno != 0);
+
+	errno = EINVAL;
+	cerror(value, end[0] != '\0');
+
+	meter = value;
 }
 
 static bool db_connect(void) {
@@ -84,7 +94,7 @@ static void db_disconnect(void) {
 bool pulse_on(const struct timeval *on) {
 	PGresult *res;
 	char tmp[1][32];
-	const char *param[2] = { param_meter, tmp[0] };
+	const char *param[2] = { meter, tmp[0] };
 	bool done = false;
 
 	if (!db_connect())
@@ -124,7 +134,7 @@ bool pulse_on(const struct timeval *on) {
 bool pulse_off(const struct timeval *on, const struct timeval *off) {
 	PGresult *res;
 	char tmp[2][32];
-	const char *param[3] = { param_meter, tmp[0], tmp[1] };
+	const char *param[3] = { meter, tmp[0], tmp[1] };
 
 	if (!db_connect())
 		return false;
@@ -148,7 +158,7 @@ bool pulse_off(const struct timeval *on, const struct timeval *off) {
 bool pulse_on_off(const struct timeval *on, const struct timeval *off) {
 	PGresult *res;
 	char tmp[2][32];
-	const char *param[3] = { param_meter, tmp[0], tmp[1] };
+	const char *param[3] = { meter, tmp[0], tmp[1] };
 	bool done = false;
 
 	if (!db_connect())
