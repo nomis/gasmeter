@@ -18,12 +18,13 @@ class Pulses:
 	class NoSuchMeter(Exception):
 		pass
 
-	def __init__(self, meter):
+	def __init__(self, db, meter):
 		data = db.select1("SELECT id FROM meters WHERE id = %(id)s", { "id": meter })
 		if data is None:
-			raise NoSuchMeter(meter)
+			raise self.NoSuchMeter(meter)
 
 		self.meter = meter
+		self.db = db
 
 	def tso(self, ts):
 		return datetime.datetime.strptime(ts, '%Y-%m-%d %H:%M:%S.%f+00')
@@ -36,12 +37,11 @@ class Pulses:
 			return delta.total_seconds()
 
 	def get_reading(self):
-		global db
 		TS, VALUE = range(0, 2)
 		CUR, PREV = range(0, 2)
 
 		print("Getting reading...")
-		data = db.select("SELECT ts,value FROM abs_pulses WHERE meter = %(id)s ORDER BY ts DESC LIMIT 2", { "id": self.meter })
+		data = self.db.select("SELECT ts,value FROM abs_pulses WHERE meter = %(id)s ORDER BY ts DESC LIMIT 2", { "id": self.meter })
 
 		reading = None
 		if len(data) == 2 and data[PREV][VALUE] is not None and data[CUR][VALUE] is not None:
@@ -149,7 +149,7 @@ class DB:
 
 	def wait(self):
 		if not self.connect():
-			raise selfReconnect
+			raise self.Reconnect
 		try:
 			notify = self.db._cnx.getnotify()
 			if notify is None:
@@ -163,7 +163,7 @@ class DB:
 			print("Notified")
 		except self.Reconnect:
 			self.abort()
-			raise
+			raise self.Reconnect
 		except pg.DatabaseError, e:
 			self.abort(e)
 			raise self.Reconnect
@@ -179,21 +179,19 @@ class Twitter:
 	class NoSuchAccount(Exception):
 		pass
 
-	def __init__(self, account):
-		global db
+	def __init__(self, db, account):
 		CON_KEY, CON_SEC, ACC_TOK, ACC_SEC = range(0, 4)
 
 		data = db.select1("SELECT o.key,o.secret,a.token,a.secret FROM twitter_oauth o, twitter_accounts a WHERE a.name = %(account)s AND o.name = a.key", { "account": account })
 		if data is None:
-			raise NoSuchAccount(account)
+			raise self.NoSuchAccount(account)
 
 		self.account = account
 		self.client = oauth.Client(oauth.Consumer(data[CON_KEY], data[CON_SEC]), oauth.Token(data[ACC_TOK], data[ACC_SEC]))
 		self.log = Log(self)
+		self.db = db
 
 	def tweet(self, message):
-		global db
-
 		ok = False
 		status = None
 		id = None
@@ -226,12 +224,10 @@ class Twitter:
 		return ok
 
 	def is_newer_update(self, ts):
-		global db
-		return db.update("UPDATE twitter_accounts SET lastupdate = %(ts)s WHERE name = %(account)s AND (lastupdate IS NULL OR lastupdate < %(ts)s)", { "ts": ts, "account": self.account }) == 1
+		return self.db.update("UPDATE twitter_accounts SET lastupdate = %(ts)s WHERE name = %(account)s AND (lastupdate IS NULL OR lastupdate < %(ts)s)", { "ts": ts, "account": self.account }) == 1
 
 	def get_last_update(self):
-		global db
-		data = db.select1("SELECT NOW(),lastupdate FROM twitter_accounts WHERE name = %(account)s", { "account": self.account })
+		data = self.db.select1("SELECT NOW(),lastupdate FROM twitter_accounts WHERE name = %(account)s", { "account": self.account })
 		if data is None or data[1] is None:
 			return None
 		return max(0, tsd(data[0], data[1]))
@@ -247,6 +243,42 @@ class Twitter:
 		print("Waiting {0}s".format(secs))
 		time.sleep(secs)
 
+class PulseTweeter:
+	def __init__(self, db, meter, account):
+		self.db = db
+		self.pulses = Pulses(db, meter)
+		self.twitter = Twitter(db, account)
+
+	def startup_delay(self):
+		self.twitter.wait()
+
+	def process_reading(self):
+		reading = self.pulses.get_reading()
+		if reading is not None and self.twitter.is_newer_update(reading["ts"]):
+			tweet = "{0:08.2f} m³ ({1:04.2f} m³/hr)".format(reading["value"], float(reading["step"]) / reading["delta"] * 3600)
+			print("[{0}] {1}".format(reading["ts"], tweet))
+	
+			ok = self.twitter.tweet(tweet)
+			try:
+				if ok:
+					self.db.commit()
+				else:
+					self.db.rollback()
+			except DB.Reconnect:
+				ok = False
+
+			return ok
+		else:
+			self.db.commit()
+			return None
+
+	def tweet_delay(self, ok):
+		if ok is not None:
+			self.twitter.delay(ok)
+
+	def wait_for_change(self):
+		self.db.wait()
+
 if __name__ == "__main__":
 	EXIT_SUCCESS, EXIT_FAILURE = range(0, 2)
 
@@ -255,37 +287,15 @@ if __name__ == "__main__":
 		sys.exit(EXIT_FAILURE)
 
 	meter, account = sys.argv[1:]
-
 	db = DB()
-	pulses = Pulses(meter)
-	twitter = Twitter(account)
-	twitter.wait()
+	tweeter = PulseTweeter(db, meter, account)
 
-	class Next(Exception):
-		pass
-	
 	while True:
 		try:
-			reading = pulses.get_reading()
-			if reading is not None and twitter.is_newer_update(reading["ts"]):
-				tweet = "{0:08.2f} m³ ({1:04.2f} m³/hr)".format(reading["value"], float(reading["step"]) / reading["delta"] * 3600)
-				print("[{0}] {1}".format(reading["ts"], tweet))
-	
-				ok = twitter.tweet(tweet)
-				if ok:
-					db.commit()
-				else:
-					db.rollback()
-				twitter.delay(ok)
-
-				if not ok:
-					raise Next
-			else:
-				db.commit()
-
-			db.wait()
-		except Next:
-			continue
+			ok = tweeter.process_reading()
+			tweeter.tweet_delay(ok)
+			if ok != False:
+				tweeter.wait_for_change()
 		except DB.Reconnect:
 			while not db.connect():
 				time.sleep(5)
