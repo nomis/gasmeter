@@ -82,6 +82,8 @@ class DB:
 		except pg.DatabaseError, e:
 			self.abort(e)
 			return False
+		except self.Reconnect:
+			return False
 		else:
 			return True
 
