@@ -296,6 +296,8 @@ if __name__ == "__main__":
 			tweeter.tweet_delay(ok)
 			if ok != False:
 				tweeter.wait_for_change()
+			# allow some time for invalid readings to be reverted
+			time.sleep(2)
 		except DB.Reconnect:
 			while not db.connect():
 				time.sleep(5)
