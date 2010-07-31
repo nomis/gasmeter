@@ -178,6 +178,11 @@ static bool __pulse_on(const struct timeval *on, const struct timeval *off) {
 	return pulse_on(on);
 }
 
+static bool __pulse_cancel(const struct timeval *on, const struct timeval *off) {
+	(void)off;
+	return pulse_cancel(on);
+}
+
 static void save(bool (*func)(const struct timeval *, const struct timeval *)) {
 	int backoff = 1;
 
@@ -190,15 +195,27 @@ static void save(bool (*func)(const struct timeval *, const struct timeval *)) {
 }
 
 static void save_off(void) {
+	bool ignore = false;
 	assert(pulse[0].on);
 	assert(!pulse[1].on);
 
+	ignore = (tv_to_ull(pulse[1].tv) - tv_to_ull(pulse[0].tv) < MIN_PULSE);
+
 	if (process_on) {
-		_printf("process on+off pulse\n");
-		save(pulse_on_off);
+		if (ignore) {
+			_printf("ignoring short on+off pulse\n");
+		} else {
+			_printf("process on+off pulse\n");
+			save(pulse_on_off);
+		}
 	} else {
-		_printf("process off pulse\n");
-		save(pulse_off);
+		if (ignore) {
+			_printf("cancelling short pulse\n");
+			save(__pulse_cancel);
+		} else {
+			_printf("process off pulse\n");
+			save(pulse_off);
+		}
 	}
 
 	backup_clear();
