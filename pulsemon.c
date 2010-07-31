@@ -61,6 +61,7 @@ static void daemon(void) {
 	close(0);
 	close(1);
 	close(2);
+	setsid();
 #endif
 }
 
