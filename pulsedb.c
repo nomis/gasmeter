@@ -26,6 +26,9 @@ mqd_t qmain, qbackup;
 bool process_on = true;
 pulse_t pulse[PULSE_CACHE];
 int count = 0;
+#ifdef SYSLOG
+char *ident;
+#endif
 
 void handle_signal(int sig);
 
@@ -47,17 +50,15 @@ void handle_signal(int sig) {
 
 static void setup_syslog(void) {
 #ifdef SYSLOG
-	char *ident;
 	int ret;
 
-	ident = malloc((strlen("pulsedb/") + strlen(mqueue_main) + 1) * sizeof(char));
+	ident = malloc((strlen("pulsedb") + strlen(mqueue_main) + 1) * sizeof(char));
 	cerror("malloc", ident == NULL);
 
-	ret = sprintf(ident, "pulsedb/%s", mqueue_main);
+	ret = sprintf(ident, "pulsedb%s", mqueue_main);
 	cerror("snprintf", ret < 0);
 
-	openlog(ident, 0, LOG_DAEMON);
-	free(ident);
+	openlog(ident, LOG_PID, LOG_DAEMON);
 #endif
 }
 
@@ -497,6 +498,7 @@ static void loop(void) {
 static void cleanup_syslog(void) {
 #ifdef SYSLOG
 	closelog();
+	free(ident);
 #endif
 }
 
