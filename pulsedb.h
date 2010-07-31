@@ -21,3 +21,4 @@ bool pulse_on(const struct timeval *on);
 bool pulse_off(const struct timeval *on, const struct timeval *off);
 bool pulse_on_off(const struct timeval *on, const struct timeval *off);
 bool pulse_cancel(const struct timeval *on);
+bool pulse_resume(const struct timeval *on);

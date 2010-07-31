@@ -13,12 +13,14 @@
 #include "pulsedb.h"
 #include "pulseq.h"
 
+#define PULSE_CACHE 3
+
 char *mqueue_main;
 char *mqueue_backup;
 unsigned long int meter;
 mqd_t qmain, qbackup;
 bool process_on = true;
-pulse_t pulse[2];
+pulse_t pulse[PULSE_CACHE];
 int count = 0;
 
 void handle_signal(int sig);
@@ -80,7 +82,7 @@ static void init(void) {
 	};
 	struct mq_attr qbackup_attr = {
 		mq_flags: 0,
-		mq_maxmsg: 2,
+		mq_maxmsg: PULSE_CACHE,
 		mq_msgsize: sizeof(pulse_t)
 	};
 
@@ -119,7 +121,7 @@ static void backup_clear(void) {
 	while (count > 0) {
 		int ret = mq_receive(qbackup, (char *)&pulse[--count], sizeof(pulse_t), 0);
 		cerror("mq_receive backup", ret != sizeof(pulse_t));
-	}	
+	}
 }
 
 static void backup_load(void) {
@@ -132,7 +134,7 @@ static void backup_load(void) {
 	signal_hold();
 
 	/* read from backup queue */
-	while (loaded < 2) {
+	while (loaded < PULSE_CACHE) {
 		ret = mq_receive(qbackup, (char *)&pulse[loaded], sizeof(pulse_t), 0);
 		if (ret != sizeof(pulse_t)) {
 			cerror("mq_receive backup", errno != EAGAIN);
@@ -143,7 +145,18 @@ static void backup_load(void) {
 		}
 	}
 
-	/* discard unknown off pulse */
+	/* discard unknown off pulses
+	 *
+	 * this may happen if the backup queue is partially cleared
+	 */
+
+	/* from [on, off, on] to [off, on] instead of [on] */
+	if (loaded == 2 && !pulse[0].on) {
+		pulse[0] = pulse[1];
+		loaded = 1;
+	}
+
+	/* from [on, off] to [off] instead of [] */
 	if (loaded == 1 && !pulse[0].on)
 		loaded = 0;
 
@@ -180,6 +193,11 @@ static bool __pulse_cancel(const struct timeval *on, const struct timeval *off) 
 	return pulse_cancel(on);
 }
 
+static bool __pulse_resume(const struct timeval *on, const struct timeval *off) {
+	(void)off;
+	return pulse_resume(on);
+}
+
 static void save(bool (*func)(const struct timeval *, const struct timeval *)) {
 	int backoff = 1;
 
@@ -191,8 +209,20 @@ static void save(bool (*func)(const struct timeval *, const struct timeval *)) {
 	}
 }
 
-static void save_off(void) {
-	bool ignore = false;
+static void save_on(void) {
+	assert(count == 1);
+	assert(pulse[0].on);
+
+	if (process_on) {
+		_printf("process on pulse\n");
+		save(__pulse_on);
+		process_on = false;
+	}
+}
+
+static void save_on_off(void) {
+	bool ignore;
+	assert(count == 2);
 	assert(pulse[0].on);
 	assert(!pulse[1].on);
 
@@ -200,7 +230,10 @@ static void save_off(void) {
 
 	if (process_on) {
 		if (ignore) {
-			_printf("ignoring short on+off pulse\n");
+			_printf("cancelling short on+off pulse\n");
+			save(__pulse_cancel);
+
+			backup_clear();
 		} else {
 			_printf("process on+off pulse\n");
 			save(pulse_on_off);
@@ -209,22 +242,100 @@ static void save_off(void) {
 		if (ignore) {
 			_printf("cancelling short pulse\n");
 			save(__pulse_cancel);
+
+			backup_clear();
 		} else {
 			_printf("process off pulse\n");
 			save(pulse_off);
 		}
 	}
-
-	backup_clear();
 }
 
-static void save_on(void) {
+static void save_on_off_on(void) {
+	bool ignore;
+
+	assert(count == 3);
 	assert(pulse[0].on);
+	assert(!pulse[1].on);
+	assert(pulse[2].on);
+
+	ignore = (tv_to_ull(pulse[2].tv) - tv_to_ull(pulse[1].tv) < MIN_PULSE);
+
+	if (ignore) {
+		pulse_t keep;
+
+		if (process_on) {
+			ignore = (tv_to_ull(pulse[1].tv) - tv_to_ull(pulse[0].tv) < MIN_PULSE);
+
+			if (ignore) {
+				_printf("cancelling short on+off pulse\n");
+				save(__pulse_cancel);
+
+				/* keep the third pulse and ignore the other two */
+				pulse[0] = pulse[2];
+			} else {
+				_printf("fixing interrupted pulse\n");
+			}
+		} else {
+			_printf("resuming interrupted pulse\n");
+		}
+
+		save(__pulse_resume);
+
+		/* critical section:
+		*
+		* block (hold) all signals
+		*/
+		signal_hold();
+
+		/* keep the first pulse */
+		keep = pulse[0];
+
+		/* clear everything */
+		backup_clear();
+
+		/* restore the pulse */
+		pulse[0] = keep;
+		backup_pulse();
+		count = 1;
+
+		/* non-critical section:
+		*
+		* unblock all signals (receive pending signals immediately)
+		*/
+		signal_dispatch();
+	} else if (process_on) {
+		_printf("check on+off+on pulse\n");
+
+		/* run on+off process */
+		count = 2;
+		save_on_off();
+
+		if (count == 2) {
+			count = 3;
+			process_on = false;
+		} else {
+			assert(count == 0);
+
+			pulse[0] = pulse[2];
+			count = 1;
+		}
+	} else {
+		_printf("handle on+off+on pulse\n");
+
+		/* clear the first two pulses */
+		count = 2;
+		backup_clear();
+
+		/* continue */
+		pulse[0] = pulse[2];
+		count = 1;
+		process_on = true;
+	}
 
 	if (process_on) {
-		_printf("process on pulse\n");
-		save(__pulse_on);
-		process_on = false;
+		assert(count == 1);
+		save_on();
 	}
 }
 
@@ -237,10 +348,8 @@ static void handle_pulse(void) {
 			count++;
 			process_on = true;
 		} else { /* discard unknown off pulse */ }
-	} else {
+	} else if (count == 1) {
 		/* on pulse waiting for off pulse */
-		assert(count == 1);
-
 		if (!pulse[count].on) { /* matching off pulse */
 			backup_pulse();
 
@@ -251,6 +360,19 @@ static void handle_pulse(void) {
 
 			pulse[0] = pulse[1];
 			process_on = true;
+		}
+	} else {
+		/* on+off pulse waiting for on pulse */
+		assert(count == 2);
+
+		if (pulse[count].on) { /* new on pulse */
+			backup_pulse();
+
+			count++;
+		} else { /* discard unknown off pulse */
+			backup_clear();
+
+			count = 0;
 		}
 	}
 }
@@ -271,6 +393,9 @@ static void signal_release(void) {
 
 static void get_data(void) {
 	int ret;
+
+	assert(count >= 0);
+	assert(count < PULSE_CACHE);
 
 	/* managed section:
 	*
@@ -319,20 +444,26 @@ static void loop(void) {
 	do {
 		_printf("main loop %d\n", count);
 		assert(count >= 0);
-		assert(count <= 2);
+		assert(count <= PULSE_CACHE);
 
 		switch (count) {
-		case 2: /* pulse on, pulse off */
-			save_off();
+		case 0: /* no data */
 			break;
 
 		case 1: /* pulse on */
 			save_on();
+			break;
 
-		case 0: /* no data */
-			get_data();
+		case 2: /* pulse on, pulse off */
+			save_on_off();
+			break;
+
+		case 3: /* pulse on, pulse off, pulse on */
+			save_on_off_on();
 			break;
 		}
+
+		get_data();
 	} while(waiting_sig == 0);
 
 	/* resend first signal captured by signal handler */
