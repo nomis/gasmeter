@@ -1,10 +1,7 @@
-#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <assert.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <mqueue.h>
 #include <signal.h>
 #include <stdbool.h>
