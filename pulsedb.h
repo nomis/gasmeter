@@ -6,12 +6,13 @@
 /* 10ms / 10000µs */
 #define MIN_PULSE 10000
 
-#ifdef FORK
-# undef VERBOSE
-#endif
-
 #ifdef VERBOSE
-# define _printf(...) printf(__VA_ARGS__)
+# ifdef FORK
+#  define SYSLOG
+#  define _printf(...) syslog(LOG_INFO, __VA_ARGS__)
+# else
+#  define _printf(...) printf(__VA_ARGS__)
+# endif
 #else
 # define _printf(...) do { } while(0)
 #endif

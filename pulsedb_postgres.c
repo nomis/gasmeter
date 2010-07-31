@@ -8,6 +8,10 @@
 #include "pulsedb.h"
 #include "pulsedb_postgres.h"
 
+#ifdef SYSLOG
+# include <syslog.h>
+#endif
+
 PGconn *conn = NULL;
 const char *meter;
 

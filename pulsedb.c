@@ -13,6 +13,10 @@
 #include "pulsedb.h"
 #include "pulseq.h"
 
+#ifdef SYSLOG
+# include <syslog.h>
+#endif
+
 #define PULSE_CACHE 3
 
 char *mqueue_main;
@@ -41,6 +45,22 @@ void handle_signal(int sig) {
 		waiting_sig = sig;
 }
 
+static void setup_syslog(void) {
+#ifdef SYSLOG
+	char *ident;
+	int ret;
+
+	ident = malloc((strlen("pulsedb/") + strlen(mqueue_main) + 1) * sizeof(char));
+	cerror("malloc", ident == NULL);
+
+	ret = sprintf(ident, "pulsedb/%s", mqueue_main);
+	cerror("snprintf", ret < 0);
+
+	openlog(ident, 0, LOG_DAEMON);
+	free(ident);
+#endif
+}
+
 static void setup(int argc, char *argv[]) {
 	int ret;
 
@@ -51,13 +71,15 @@ static void setup(int argc, char *argv[]) {
 
 	mqueue_main = argv[1];
 
-	mqueue_backup = malloc(strlen(mqueue_main) * sizeof(char) + 2);
+	mqueue_backup = malloc((strlen(mqueue_main) + 2) * sizeof(char));
 	cerror("malloc", mqueue_backup == NULL);
 
 	ret = sprintf(mqueue_backup, "%s~", mqueue_main);
 	cerror("snprintf", ret < 0);
 
 	pulse_meter(argv[2]);
+
+	setup_syslog();
 }
 
 static void signal_init(void) {
@@ -471,7 +493,14 @@ static void loop(void) {
 		cerror("kill", kill(getpid(), waiting_sig) != 0);
 }
 
+static void cleanup_syslog(void) {
+#ifdef SYSLOG
+	closelog();
+#endif
+}
+
 static void cleanup(void) {
+	cleanup_syslog();
 	cerror(mqueue_main, mq_close(qmain));
 	cerror(mqueue_backup, mq_close(qbackup));
 	free(mqueue_backup);
