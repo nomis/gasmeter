@@ -75,7 +75,7 @@ static void report(bool on) {
 }
 
 static void check(void) {
-	static int last = ~0;
+	static int last = SERIO_IN;
 	int state;
 
 	cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
