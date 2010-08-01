@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <mqueue.h>
+#include <sched.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,18 @@ static void setup(int argc, char *argv[]) {
 	mqueue = argv[2];
 }
 
+static void init_root(void) {
+	if (geteuid() == 0) {
+		struct sched_param schedp;
+
+		cerror("Failed to get max scheduler priority", (schedp.sched_priority = sched_get_priority_max(SCHED_FIFO)) < 0);
+		schedp.sched_priority -= 20;
+		cerror("Failed to set scheduler policy", sched_setscheduler(0, SCHED_FIFO, &schedp));
+		cerror("Failed to drop SGID permissions", setregid(getgid(), getgid()));
+		cerror("Failed to drop SUID permissions", setreuid(getuid(), getuid()));
+	}
+}
+
 static void init(void) {
 	struct mq_attr q_attr = {
 		.mq_flags = 0,
@@ -38,6 +51,8 @@ static void init(void) {
 #if SERIO_OUT != 0
 	int state;
 #endif
+
+	init_root();
 
 	fd = open(device, O_RDONLY|O_NONBLOCK);
 	cerror(device, fd < 0);
