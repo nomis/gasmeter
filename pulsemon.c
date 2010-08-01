@@ -31,9 +31,9 @@ static void setup(int argc, char *argv[]) {
 
 static void init(void) {
 	struct mq_attr q_attr = {
-		mq_flags: 0,
-		mq_maxmsg: 4096,
-		mq_msgsize: sizeof(pulse_t)
+		.mq_flags = 0,
+		.mq_maxmsg = 4096,
+		.mq_msgsize = sizeof(pulse_t)
 	};
 #if SERIO_OUT != 0
 	int state;

@@ -33,12 +33,12 @@ char *ident;
 void handle_signal(int sig);
 
 struct sigaction sa_ign = { /* handle signals, but store them for later */
-	sa_handler: handle_signal,
-	sa_flags: 0
+	.sa_handler = handle_signal,
+	.sa_flags = 0
 };
 struct sigaction sa_dfl = { /* use default signal handler */
-	sa_handler: SIG_DFL,
-	sa_flags: 0
+	.sa_handler = SIG_DFL,
+	.sa_flags = 0
 };
 sigset_t die_signals;
 int waiting_sig = 0;
@@ -99,14 +99,14 @@ static void signal_init(void) {
 
 static void init(void) {
 	struct mq_attr qmain_attr = {
-		mq_flags: 0,
-		mq_maxmsg: 4096,
-		mq_msgsize: sizeof(pulse_t)
+		.mq_flags = 0,
+		.mq_maxmsg = 4096,
+		.mq_msgsize = sizeof(pulse_t)
 	};
 	struct mq_attr qbackup_attr = {
-		mq_flags: 0,
-		mq_maxmsg: PULSE_CACHE,
-		mq_msgsize: sizeof(pulse_t)
+		.mq_flags = 0,
+		.mq_maxmsg = PULSE_CACHE,
+		.mq_msgsize = sizeof(pulse_t)
 	};
 
 	qmain = mq_open(mqueue_main, O_RDONLY|O_CREAT, S_IRUSR|S_IWUSR, &qmain_attr);
