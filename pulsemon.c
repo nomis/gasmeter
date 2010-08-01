@@ -91,14 +91,19 @@ static void report(bool on) {
 }
 
 static void check(void) {
-	static int last = SERIO_IN;
+	static bool first = true;
+	static int last;
 	int state;
 
 	cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
 	state &= SERIO_IN;
 
-	if (last != state)
-		report(state != 0);
+	if (first) {
+		first = false;
+	} else {
+		if (last != state)
+			report(state != 0);
+	}
 
 	last = state;
 }
