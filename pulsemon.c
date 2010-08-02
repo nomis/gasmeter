@@ -48,7 +48,7 @@ static void init(void) {
 		.mq_maxmsg = 4096,
 		.mq_msgsize = sizeof(pulse_t)
 	};
-#if SERIO_OUT != 0
+#if (SERIO_OUT|SERIO_OFF) != 0
 	int state;
 #endif
 
@@ -57,9 +57,14 @@ static void init(void) {
 	fd = open(device, O_RDONLY|O_NONBLOCK);
 	cerror(device, fd < 0);
 
-#if SERIO_OUT != 0
+#if (SERIO_OUT|SERIO_OFF) != 0
 	cerror("Failed to get serial IO status", ioctl(fd, TIOCMGET, &state) != 0);
+# if SERIO_OUT != 0
 	state |= SERIO_OUT;
+# endif
+# if SERIO_OFF != 0
+	state &= ~SERIO_OFF;
+# endif
 	cerror("Failed to set serial IO status", ioctl(fd, TIOCMSET, &state) != 0);
 #endif
 
