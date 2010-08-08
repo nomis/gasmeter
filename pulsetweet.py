@@ -217,8 +217,13 @@ class Twitter:
 			except Exception, e:
 				err = [resp, content, e]
 			else:
-				if data is not None and "id" in data:
-					id = data["id"]
+				if data is not None:
+					if "id" in data:
+						id = data["id"]
+
+					if not ok and "error" in data and data["error"] == "Status is a duplicate.":
+						ok = True
+						err = [content]
 		
 		if log is None:
 			log = tweet
