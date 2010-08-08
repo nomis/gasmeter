@@ -259,7 +259,7 @@ class PulseTweeter:
 	def process_reading(self):
 		reading = self.pulses.get_reading()
 		if reading is not None and self.twitter.is_newer_update(reading["ts"]):
-			tweet = "{0:08.2f} m³ ({1:04.2f} m³/hr)".format(reading["value"], float(reading["step"]) / reading["delta"] * 3600)
+			tweet = "{0:09.3f} m³ ({1:04.2f} m³/hr)".format(reading["value"], float(reading["step"]) / reading["delta"] * 3600)
 			print("[{0}] {1}".format(reading["ts"], tweet))
 	
 			ok = self.twitter.tweet(tweet, "{0} <{1}>".format(tweet, reading["ts"]))
