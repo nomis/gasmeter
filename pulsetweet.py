@@ -3,6 +3,7 @@
 
 from __future__ import division
 from __future__ import print_function
+import argparse
 import datetime
 import json
 import oauth2 as oauth
@@ -284,13 +285,13 @@ class PulseTweeter:
 if __name__ == "__main__":
 	EXIT_SUCCESS, EXIT_FAILURE = range(0, 2)
 
-	if len(sys.argv) != 3:
-		print("Usage: pulsetweet <meter> <account>")
-		sys.exit(EXIT_FAILURE)
+	parser = argparse.ArgumentParser(description='Tweet gas meter pulses')
+	parser.add_argument('meter', help='Meter identifier')
+	parser.add_argument('account', help='Twitter account')
+	args = parser.parse_args()
 
-	meter, account = sys.argv[1:]
 	db = DB()
-	tweeter = PulseTweeter(db, meter, account)
+	tweeter = PulseTweeter(db, args.meter, args.account)
 
 	while True:
 		try:
