@@ -43,14 +43,14 @@ CREATE VIEW abs_pulses AS
 CREATE TABLE meters (
     id serial NOT NULL,
     name text NOT NULL,
-    pulse numeric(8,3),
-    "offset" numeric(8,3)
+    pulse numeric(9,4),
+    "offset" numeric(9,4)
 );
 
 CREATE TABLE readings (
     meter integer NOT NULL,
     ts timestamp with time zone DEFAULT now() NOT NULL,
-    value numeric(8,3)
+    value numeric(9,4)
 );
 
 CREATE TABLE twitter_accounts (
