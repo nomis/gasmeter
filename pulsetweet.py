@@ -191,7 +191,7 @@ class Twitter:
 		self.log = Log(self)
 		self.db = db
 
-	def tweet(self, message):
+	def tweet(self, message, log=None):
 		ok = False
 		status = None
 		id = None
@@ -218,9 +218,11 @@ class Twitter:
 				if data is not None and "id" in data:
 					id = data["id"]
 		
-		log("{0} {1} [{2}] {3}".format(tweet, reading["ts"], status, id))
+		if log is None:
+			log = tweet
+		self.log("{0} [{1}] {2}".format(log, status, id))
 		for msg in err:
-			log("  {0}".msg)
+			self.log("  {0}".format(msg))
 		return ok
 
 	def is_newer_update(self, ts):
@@ -258,7 +260,7 @@ class PulseTweeter:
 			tweet = "{0:08.2f} m³ ({1:04.2f} m³/hr)".format(reading["value"], float(reading["step"]) / reading["delta"] * 3600)
 			print("[{0}] {1}".format(reading["ts"], tweet))
 	
-			ok = self.twitter.tweet(tweet)
+			ok = self.twitter.tweet(tweet, "{0} <{1}>".format(tweet, reading["ts"]))
 			try:
 				if ok:
 					self.db.commit()
