@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 import argparse
 import datetime
+import daemon
 import json
 import oauth2 as oauth
 import pg
@@ -282,10 +283,24 @@ class PulseTweeter:
 	def wait_for_change(self):
 		self.db.wait()
 
+	def main_loop(self):
+		while True:
+			try:
+				ok = self.process_reading()
+				self.tweet_delay(ok)
+				if ok != False:
+					self.wait_for_change()
+				# allow some time for invalid readings to be reverted
+				time.sleep(2)
+			except DB.Reconnect:
+				while not self.db.connect():
+					time.sleep(5)
+
 if __name__ == "__main__":
 	EXIT_SUCCESS, EXIT_FAILURE = range(0, 2)
 
 	parser = argparse.ArgumentParser(description='Tweet gas meter pulses')
+	parser.add_argument('-d', '--daemon', action='store_true', help='Run in the background')
 	parser.add_argument('meter', help='Meter identifier')
 	parser.add_argument('account', help='Twitter account')
 	args = parser.parse_args()
@@ -293,16 +308,10 @@ if __name__ == "__main__":
 	db = DB()
 	tweeter = PulseTweeter(db, args.meter, args.account)
 
-	while True:
-		try:
-			ok = tweeter.process_reading()
-			tweeter.tweet_delay(ok)
-			if ok != False:
-				tweeter.wait_for_change()
-			# allow some time for invalid readings to be reverted
-			time.sleep(2)
-		except DB.Reconnect:
-			while not db.connect():
-				time.sleep(5)
+	if args.daemon:
+		with daemon.DaemonContext():
+			tweeter.main_loop()
+	else:
+		tweeter.main_loop()
 
 	sys.exit(EXIT_FAILURE)
