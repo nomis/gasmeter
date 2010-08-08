@@ -10,6 +10,10 @@ CREATE FUNCTION meter_pulse_interval(meter integer) RETURNS numeric
     AS $_$SELECT pulse FROM meters WHERE id = $1;$_$
     LANGUAGE sql STABLE STRICT;
 
+CREATE FUNCTION meter_pulse_offset(meter integer) RETURNS numeric
+    LANGUAGE sql STABLE STRICT
+    AS $_$SELECT "offset" FROM meters WHERE id = $1;$_$;
+
 CREATE FUNCTION pulse_calculate(meter integer, before timestamp with time zone) RETURNS numeric
     AS $_$SELECT reading_calculate($1, $2, pulse_count($1, $2));$_$
     LANGUAGE sql STABLE STRICT;
@@ -23,7 +27,7 @@ CREATE FUNCTION reading_calculate(meter integer, before timestamp with time zone
     LANGUAGE sql STABLE STRICT;
 
 CREATE FUNCTION reading_floor(meter integer, value numeric) RETURNS numeric
-    AS $_$SELECT $2 - MOD($2, meter_pulse_interval($1));$_$
+    AS $_$SELECT $2 - MOD($2 - meter_pulse_offset($1), meter_pulse_interval($1));$_$
     LANGUAGE sql STABLE STRICT;
 
 CREATE TABLE pulses (
@@ -39,7 +43,8 @@ CREATE VIEW abs_pulses AS
 CREATE TABLE meters (
     id serial NOT NULL,
     name text NOT NULL,
-    pulse numeric(8,3)
+    pulse numeric(8,3),
+    "offset" numeric(8,3)
 );
 
 CREATE TABLE readings (
