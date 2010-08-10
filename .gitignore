@@ -1,3 +1,5 @@
 pulsemon
 pulsedb
 pulsefake
+*.pyc
+*.pyo
