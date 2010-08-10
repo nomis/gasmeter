@@ -67,6 +67,13 @@ CREATE TABLE twitter_oauth (
     secret text NOT NULL
 );
 
+CREATE TABLE pachube (
+    feed bigint NOT NULL,
+    data text NOT NULL,
+    key text NOT NULL,
+    lastupdate timestamp with time zone
+);
+
 ALTER TABLE ONLY meters
     ADD CONSTRAINT meters_name_key UNIQUE (name);
 
@@ -105,3 +112,7 @@ ALTER TABLE ONLY readings
 
 ALTER TABLE ONLY twitter_accounts
     ADD CONSTRAINT twitter_accounts_key_fkey FOREIGN KEY (key) REFERENCES twitter_oauth(name);
+
+ALTER TABLE ONLY pachube
+    ADD CONSTRAINT pachube_pkey PRIMARY KEY (feed, data);
+
