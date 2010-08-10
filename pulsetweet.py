@@ -11,6 +11,8 @@ import sys
 import time
 import urllib
 
+INTERVAL = 30
+
 class Twitter:
 	class NoSuchAccount(Exception):
 		pass
@@ -82,7 +84,7 @@ class Twitter:
 			time.sleep(INTERVAL - last)
 
 	def delay(self, ok):
-		secs = 30 if ok else 300
+		secs = INTERVAL if ok else INTERVAL * 10
 		print("Waiting {0}s".format(secs))
 		time.sleep(secs)
 
