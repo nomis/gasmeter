@@ -10,30 +10,33 @@ import sys
 import time
 
 INTERVAL = 4
+TIMEOUT = 60
 
 class Pachube:
 	class NoSuchFeedData(Exception):
 		pass
 
-	def __init__(self, db, feed, data):
-		key = db.select1("SELECT key FROM pachube WHERE feed = %(feed)s AND data = %(data)s", { "feed": feed, "data": data })
+	def __init__(self, db, feed, ds_value, ds_rate):
+		key = db.select1("SELECT key FROM pachube WHERE feed = %(feed)s AND data = %(data)s", { "feed": feed, "data": ds_value })
 		if key is None:
-			raise self.NoSuchFeedData("{0}/{1}".format(feed, data))
+			raise self.NoSuchFeedData("{0}/{1}".format(feed, ds_value))
 
 		self.db = db
 		self.feed = feed
-		self.data = data
+		self.ds_value = ds_value
+		self.ds_rate = ds_rate
 		self.key = key[0]
-		self.log = pulselib.Log("pulsepachube/{0}/{1}".format(feed, data))
+		self.log = pulselib.Log("pulsepachube/{0}/{1}".format(feed, ds_value))
 
-	def update(self, value, log):
+	def update(self, value, rate, log):
 		ok = False
 		status = None
 		id = None
 		err = []
 		try:
 			pac = eeml.Pachube("/api/feeds/{0}.xml".format(self.feed), self.key)
-			pac.update([eeml.Data(self.data, value)])
+			pac.update([eeml.Data(self.ds_value, value)])
+			pac.update([eeml.Data(self.ds_rate, rate)])
 			pac.put()
 		except Exception, e:
 			err = [e]
@@ -46,10 +49,10 @@ class Pachube:
 		return ok
 
 	def is_newer_update(self, ts):
-		return self.db.update("UPDATE pachube SET lastupdate = %(ts)s WHERE feed = %(feed)s AND data = %(data)s AND (lastupdate IS NULL OR lastupdate < %(ts)s)", { "ts": ts, "feed": self.feed, "data": self.data }) == 1
+		return self.db.update("UPDATE pachube SET lastupdate = %(ts)s WHERE feed = %(feed)s AND data = %(data)s AND (lastupdate IS NULL OR lastupdate < %(ts)s)", { "ts": ts, "feed": self.feed, "data": self.ds_value }) == 1
 
 	def get_last_update(self):
-		data = self.db.select1("SELECT NOW(),lastupdate FROM pachube WHERE feed = %(feed)s AND data = %(data)s", { "feed": self.feed, "data": self.data })
+		data = self.db.select1("SELECT NOW(),lastupdate FROM pachube WHERE feed = %(feed)s AND data = %(data)s", { "feed": self.feed, "data": self.ds_value })
 		if data is None or data[1] is None:
 			return None
 		return max(0, tsd(data[0], data[1]))
@@ -66,9 +69,9 @@ class Pachube:
 		time.sleep(secs)
 
 class PulsePachube(pulselib.Handler):
-	def __init__(self, db, meter, feed, data):
-		pulselib.Handler.__init__(self, db, meter)
-		self.pachube = Pachube(db, feed, data)
+	def __init__(self, db, meter, feed, ds_value, ds_rate):
+		pulselib.Handler.__init__(self, db, meter, TIMEOUT)
+		self.pachube = Pachube(db, feed, ds_value, ds_rate)
 
 	def startup_delay(self):
 		self.pachube.wait()
@@ -77,7 +80,7 @@ class PulsePachube(pulselib.Handler):
 		return self.pachube.is_newer_update(ts)
 
 	def handle_pulse(self, ts, value, rate):
-		return self.pachube.update(value, "{0:09.3f} m³ <{1}>".format(value, ts))
+		return self.pachube.update(value, rate, "{0:09.3f} m³ ({1:04.2f} m³/hr) <{2}>".format(value, rate, ts))
 
 	def pulse_delay(self, ok):
 		if ok is not None:
@@ -90,11 +93,12 @@ if __name__ == "__main__":
 	parser.add_argument('-d', '--daemon', action='store_true', help='Run in the background')
 	parser.add_argument('meter', help='Meter identifier')
 	parser.add_argument('feed', help='Pachube feed')
-	parser.add_argument('data', help='Pachube data')
+	parser.add_argument('ds_value', help='Pachube value data stream')
+	parser.add_argument('ds_rate', help='Pachube rate data stream')
 	args = parser.parse_args()
 
 	db = pulselib.DB()
-	pachube = PulsePachube(db, args.meter, args.feed, args.data)
+	pachube = PulsePachube(db, args.meter, args.feed, args.ds_value, args.ds_rate)
 
 	if args.daemon:
 		with daemon.DaemonContext():
