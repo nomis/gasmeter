@@ -208,8 +208,8 @@ class Handler:
 			ok = self.handle_pulse(ts, value, rate)
 			try:
 				if ok:
-					self.last_rate = "{0:04.2f}".format(rate)
 					self.db.commit()
+					self.last_rate = "{0:04.2f}".format(rate)
 				else:
 					self.db.rollback()
 			except DB.Reconnect:
