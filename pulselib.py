@@ -27,7 +27,11 @@ class Pulses:
 		return datetime.datetime.strptime(ts, '%Y-%m-%d %H:%M:%S.%f+00')
 
 	def tsd(self, cur, prev):
-		delta = self.tso(cur) - self.tso(prev)
+		if isinstance(cur, str):
+			cur = self.tso(cur)
+		if isinstance(prev, str):
+			prev = self.tso(prev)
+		delta = cur - prev
 		if sys.version_info < (2, 7):
 			return (delta.microseconds + (delta.seconds + delta.days * 24 * 3600) * 10**6) / 10**6
 		else:
@@ -46,7 +50,8 @@ class Pulses:
 				"ts": data[CUR][TS],
 				"value": data[CUR][VALUE],
 				"delta": self.tsd(data[CUR][TS], data[PREV][TS]),
-				"step": data[CUR][VALUE] - data[PREV][VALUE]
+				"step": data[CUR][VALUE] - data[PREV][VALUE],
+				"idle": self.tsd(datetime.datetime.utcnow(), data[CUR][TS])
 			}
 
 		print("Reading: {0}".format(reading))
@@ -144,7 +149,7 @@ class DB:
 			self.abort(e)
 			raise self.Reconnect
 
-	def wait(self):
+	def wait(self, timeout=0):
 		if not self.connect():
 			raise self.Reconnect
 		try:
@@ -155,7 +160,10 @@ class DB:
 			while notify is None:
 				if self.db._cnx.fileno() < 0:
 					raise self.Reconnect
-				select.select([self.db._cnx], [], [self.db._cnx])
+				(l, r, x) = select.select([self.db._cnx], [], [self.db._cnx], timeout)
+				if len(l) == 0 and len(r) == 0 and len(x) == 0:
+					print("Timeout")
+					return
 				notify = self.db._cnx.getnotify()
 			print("Notified")
 		except self.Reconnect:
@@ -173,9 +181,11 @@ class Log:
 		syslog.syslog(message)
 
 class Handler:
-	def __init__(self, db, meter):
+	def __init__(self, db, meter, timeout=0):
 		self.db = db
 		self.pulses = Pulses(db, meter)
+		self.timeout = timeout
+		self.last_rate = ""
 
 	def startup_delay(self):
 		pass
@@ -188,13 +198,17 @@ class Handler:
 
 	def process_reading(self):
 		reading = self.pulses.get_reading()
-		if reading is not None and self.is_newer_update(reading["ts"]):
+		if reading is None:
+			self.db.commit()
+			return None
+		elif self.is_newer_update(reading["ts"]):
 			(ts, value, rate) = (reading["ts"], reading["value"], float(reading["step"]) / reading["delta"] * 3600)
 			print("[{0}] {1:09.3f} m³ ({2:04.2f} m³/hr)".format(ts, value, rate))
 
 			ok = self.handle_pulse(ts, value, rate)
 			try:
 				if ok:
+					self.last_rate = "{0:04.2f}".format(rate)
 					self.db.commit()
 				else:
 					self.db.rollback()
@@ -202,6 +216,28 @@ class Handler:
 				ok = False
 
 			return ok
+		elif self.timeout > 0 and reading["idle"] > self.timeout:
+			(ts, value, rate, idle_rate) = (reading["ts"], reading["value"], float(reading["step"]) / reading["delta"] * 3600, float(reading["value"] + reading["step"]) / reading["idle"])
+			if idle_rate < rate:
+				fake_rate = "{0:04.2f}".format(idle_rate)
+				if fake_rate != self.last_rate:
+					idle_rate = float(fake_rate)
+					print("[{0}] {1:09.3f} m³ ({2:04.2f} m³/hr)".format(ts, value, idle_rate))
+
+					ok = self.handle_pulse(ts, value, idle_rate)
+					try:
+						if ok:
+							self.last_rate = fake_rate
+							self.db.commit()
+						else:
+							self.db.rollback()
+					except DB.Reconnect:
+						ok = False
+
+					return ok
+
+			self.db.commit()
+			return None
 		else:
 			self.db.commit()
 			return None
@@ -210,7 +246,7 @@ class Handler:
 		pass
 
 	def wait_for_change(self):
-		self.db.wait()
+		self.db.wait(self.timeout)
 
 	def main_loop(self):
 		while True:
