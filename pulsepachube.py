@@ -10,7 +10,7 @@ import sys
 import time
 
 INTERVAL = 4
-TIMEOUT = 60
+TIMEOUT = 30
 
 class Pachube:
 	class NoSuchFeedData(Exception):

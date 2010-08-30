@@ -246,7 +246,8 @@ class Handler:
 		pass
 
 	def wait_for_change(self):
-		self.db.wait(self.timeout)
+		timeout = 0 if self.last_rate == "0.00" else self.timeout
+		self.db.wait(timeout)
 
 	def main_loop(self):
 		while True:
