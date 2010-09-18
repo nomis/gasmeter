@@ -100,7 +100,7 @@ class PulseTweeter(pulselib.Handler):
 		return self.twitter.is_newer_update(ts)
 
 	def handle_pulse(self, ts, value, rate):
-		tweet = "{0:09.3f} m³ ({1:04.2f} m³/hr)".format(value, rate)
+		tweet = "{0:08.2f} m³ ({1:04.2f} m³/hr)".format(value, rate)
 		return self.twitter.tweet(tweet, "{0} <{1}>".format(tweet, ts))
 
 	def pulse_delay(self, ok):
