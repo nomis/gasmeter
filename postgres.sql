@@ -141,3 +141,19 @@ CREATE FUNCTION reading_calculate(meter integer, pulse timestamp with time zone)
     ELSIF next_reading_value(meter, pulse) IS NOT NULL THEN RETURN reading_calculate_forward(meter, pulse);
     ELSE RETURN NULL; END IF; END;$_$
     LANGUAGE plpgsql STABLE STRICT;
+
+CREATE FUNCTION dow_char(ts timestamp with time zone) RETURNS text
+    AS $_$SELECT dow[extract(dow FROM $1)+1] FROM (SELECT ARRAY['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] AS dow) AS temp;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE VIEW meter_usage AS
+    SELECT meters.id AS meter,
+        to_char(date_trunc('day', pulses.start), 'YYYY-MM-DD') AS day,
+        dow_char(date_trunc('day', pulses.start)) AS dow,
+        reading_calculate(meters.id, date_trunc('day', pulses.start) + '1 day'::interval) - reading_calculate(meters.id, date_trunc('day', pulses.start)) AS usage,
+        reading_calculate(meters.id, date_trunc('day', pulses.start) + '12 hours'::interval) - reading_calculate(meters.id, date_trunc('day', pulses.start)) AS am,
+        reading_calculate(meters.id, date_trunc('day', pulses.start) + '1 day'::interval) - reading_calculate(meters.id, date_trunc('day', pulses.start) + '12 hours'::interval) AS pm
+    FROM meters, pulses
+    WHERE meters.id = pulses.meter
+    GROUP BY meters.id, date_trunc('day', pulses.start)
+    ORDER BY meters.id, date_trunc('day', pulses.start);
