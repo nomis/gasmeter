@@ -1,70 +1,9 @@
-CREATE FUNCTION prev_reading_ts(meter integer, before timestamp with time zone) RETURNS timestamp with time zone
-    AS $_$SELECT ts FROM readings WHERE meter = $1 AND ts <= $2 ORDER BY ts DESC LIMIT 1;$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION prev_reading_value(meter integer, before timestamp with time zone) RETURNS numeric
-    AS $_$SELECT value FROM readings WHERE meter = $1 and ts <= $2 ORDER BY ts DESC LIMIT 1;$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION next_reading_ts(meter integer, after timestamp with time zone) RETURNS timestamp with time zone
-    AS $_$SELECT ts FROM readings WHERE meter = $1 AND ts >= $2 ORDER BY ts LIMIT 1;$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION next_reading_value(meter integer, after timestamp with time zone) RETURNS numeric
-    AS $_$SELECT value FROM readings WHERE meter = $1 and ts >= $2 ORDER BY ts LIMIT 1;$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION meter_pulse_interval(meter integer) RETURNS numeric
-    AS $_$SELECT pulse FROM meters WHERE id = $1;$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION meter_pulse_offset(meter integer) RETURNS numeric
-    LANGUAGE sql STABLE STRICT
-    AS $_$SELECT "offset" FROM meters WHERE id = $1;$_$;
-
-CREATE FUNCTION pulse_count_backward(meter integer, before timestamp with time zone) RETURNS bigint
-    AS $_$SELECT COUNT(*) FROM pulses WHERE meter = $1 AND start > prev_reading_ts($1, $2) AND start <= $2;$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION pulse_calculate_backward(meter integer, before timestamp with time zone, pulses bigint) RETURNS numeric
-    AS $_$SELECT reading_floor($1, prev_reading_value($1, $2)) + $3 * meter_pulse_interval($1);$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION reading_calculate_backward(meter integer, before timestamp with time zone) RETURNS numeric
-    AS $_$SELECT pulse_calculate_backward($1, $2, pulse_count_backward($1, $2));$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION pulse_count_forward(meter integer, after timestamp with time zone) RETURNS bigint
-    AS $_$SELECT COUNT(*) FROM pulses WHERE meter = $1 AND start <= next_reading_ts($1, $2) AND start > $2;$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION pulse_calculate_forward(meter integer, after timestamp with time zone, pulses bigint) RETURNS numeric
-    AS $_$SELECT reading_floor($1, next_reading_value($1, $2)) - $3 * meter_pulse_interval($1);$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION reading_calculate_forward(meter integer, after timestamp with time zone) RETURNS numeric
-    AS $_$SELECT pulse_calculate_forward($1, $2, pulse_count_forward($1, $2));$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION reading_floor(meter integer, value numeric) RETURNS numeric
-    AS $_$SELECT $2 - MOD($2 - meter_pulse_offset($1), meter_pulse_interval($1));$_$
-    LANGUAGE sql STABLE STRICT;
-
-CREATE FUNCTION reading_calculate(meter integer, pulse timestamp with time zone) RETURNS numeric
-    AS $_$BEGIN; IF prev_reading_value(meter, pulse) IS NOT NULL THEN RETURN reading_calculate_backward(meter, pulse);
-    ELSIF next_reading_value(meter, pulse) IS NOT NULL THEN RETURN reading_calculate_forward(meter, pulse);
-    ELSE RETURN NULL; END IF; END;$_$
-    LANGUAGE plpgsql STABLE STRICT;
-
 CREATE TABLE pulses (
     meter integer NOT NULL,
     start timestamp with time zone NOT NULL,
     stop timestamp with time zone,
     CONSTRAINT valid_pulse CHECK ((stop >= start))
 );
-
-CREATE VIEW abs_pulses AS
-    SELECT pulses.meter, pulses.start AS ts, reading_calculate(pulses.meter, pulses.start) AS value, (pulses.stop - pulses.start) AS pulse FROM pulses;
 
 CREATE TABLE meters (
     id serial NOT NULL,
@@ -142,3 +81,63 @@ ALTER TABLE ONLY twitter_accounts
 ALTER TABLE ONLY pachube
     ADD CONSTRAINT pachube_pkey PRIMARY KEY (feed, data);
 
+CREATE VIEW abs_pulses AS
+    SELECT pulses.meter, pulses.start AS ts, reading_calculate(pulses.meter, pulses.start) AS value, (pulses.stop - pulses.start) AS pulse FROM pulses;
+
+CREATE FUNCTION prev_reading_ts(meter integer, before timestamp with time zone) RETURNS timestamp with time zone
+    AS $_$SELECT ts FROM readings WHERE meter = $1 AND ts <= $2 ORDER BY ts DESC LIMIT 1;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION prev_reading_value(meter integer, before timestamp with time zone) RETURNS numeric
+    AS $_$SELECT value FROM readings WHERE meter = $1 and ts <= $2 ORDER BY ts DESC LIMIT 1;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION next_reading_ts(meter integer, after timestamp with time zone) RETURNS timestamp with time zone
+    AS $_$SELECT ts FROM readings WHERE meter = $1 AND ts >= $2 ORDER BY ts LIMIT 1;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION next_reading_value(meter integer, after timestamp with time zone) RETURNS numeric
+    AS $_$SELECT value FROM readings WHERE meter = $1 and ts >= $2 ORDER BY ts LIMIT 1;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION meter_pulse_interval(meter integer) RETURNS numeric
+    AS $_$SELECT pulse FROM meters WHERE id = $1;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION meter_pulse_offset(meter integer) RETURNS numeric
+    LANGUAGE sql STABLE STRICT
+    AS $_$SELECT "offset" FROM meters WHERE id = $1;$_$;
+
+CREATE FUNCTION pulse_count_backward(meter integer, before timestamp with time zone) RETURNS bigint
+    AS $_$SELECT COUNT(*) FROM pulses WHERE meter = $1 AND start > prev_reading_ts($1, $2) AND start <= $2;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION pulse_calculate_backward(meter integer, before timestamp with time zone, pulses bigint) RETURNS numeric
+    AS $_$SELECT reading_floor($1, prev_reading_value($1, $2)) + $3 * meter_pulse_interval($1);$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION reading_calculate_backward(meter integer, before timestamp with time zone) RETURNS numeric
+    AS $_$SELECT pulse_calculate_backward($1, $2, pulse_count_backward($1, $2));$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION pulse_count_forward(meter integer, after timestamp with time zone) RETURNS bigint
+    AS $_$SELECT COUNT(*) FROM pulses WHERE meter = $1 AND start <= next_reading_ts($1, $2) AND start > $2;$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION pulse_calculate_forward(meter integer, after timestamp with time zone, pulses bigint) RETURNS numeric
+    AS $_$SELECT reading_floor($1, next_reading_value($1, $2)) - $3 * meter_pulse_interval($1);$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION reading_calculate_forward(meter integer, after timestamp with time zone) RETURNS numeric
+    AS $_$SELECT pulse_calculate_forward($1, $2, pulse_count_forward($1, $2));$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION reading_floor(meter integer, value numeric) RETURNS numeric
+    AS $_$SELECT $2 - MOD($2 - meter_pulse_offset($1), meter_pulse_interval($1));$_$
+    LANGUAGE sql STABLE STRICT;
+
+CREATE FUNCTION reading_calculate(meter integer, pulse timestamp with time zone) RETURNS numeric
+    AS $_$BEGIN; IF prev_reading_value(meter, pulse) IS NOT NULL THEN RETURN reading_calculate_backward(meter, pulse);
+    ELSIF next_reading_value(meter, pulse) IS NOT NULL THEN RETURN reading_calculate_forward(meter, pulse);
+    ELSE RETURN NULL; END IF; END;$_$
+    LANGUAGE plpgsql STABLE STRICT;
