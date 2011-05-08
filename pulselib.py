@@ -156,12 +156,14 @@ class DB:
 			notify = self.db._cnx.getnotify()
 			if notify is None:
 				print("Listening...")
+			if timeout == 0:
+				timeout = None
 
 			while notify is None:
 				if self.db._cnx.fileno() < 0:
 					raise self.Reconnect
-				(l, r, x) = select.select([self.db._cnx], [], [self.db._cnx], timeout)
-				if len(l) == 0 and len(r) == 0 and len(x) == 0:
+				(r, w, x) = select.select([self.db._cnx], [], [self.db._cnx], timeout)
+				if len(r) == 0 and len(w) == 0 and len(x) == 0:
 					print("Timeout")
 					return
 				notify = self.db._cnx.getnotify()
