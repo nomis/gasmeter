@@ -248,7 +248,17 @@ class Handler:
 		pass
 
 	def wait_for_change(self):
-		timeout = 0 if self.last_rate == "0.00" else self.timeout
+		timeout = self.timeout
+
+		# Getting down to a rate of "0.00" and disabling the early timeout will take a long time
+		special = {
+			"0.00": 0,
+			"0.01": 100,
+			"0.02": 10
+		}
+		if self.last_rate in special:
+			timeout = timeout * special[self.last_rate]
+
 		self.db.wait(timeout)
 
 	def main_loop(self):
