@@ -328,24 +328,16 @@ static void save_on_off_on(void) {
 		* unblock all signals (receive pending signals immediately)
 		*/
 		signal_dispatch();
-	} else if (process_on) {
-		_printf("check on+off+on pulse\n");
-
-		/* run on+off process */
-		count = 2;
-		save_on_off();
-
-		if (count == 2) {
-			count = 3;
-			process_on = false;
-		} else {
-			assert(count == 0);
-
-			pulse[0] = pulse[2];
-			count = 1;
-		}
 	} else {
-		_printf("handle on+off+on pulse\n");
+		if (process_on) {
+			_printf("check on+off+on pulse\n");
+
+			/* run on+off process */
+			count = 2;
+			save_on_off();
+		} else {
+			_printf("handle on+off+on pulse\n");
+		}
 
 		/* clear the first two pulses */
 		count = 2;
