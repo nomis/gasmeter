@@ -35,7 +35,7 @@ class Twitter:
 		id = None
 		err = []
 		try:
-			resp, content = self.client.request("https://twitter.com/statuses/update.json", "POST", "status=" + urllib.quote(message))
+			resp, content = self.client.request("https://api.twitter.com/1/statuses/update.json", "POST", "status=" + urllib.quote(message))
 		except Exception, e:
 			err = [e]
 		else:
