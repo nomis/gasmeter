@@ -11,7 +11,7 @@ import sys
 import time
 import urllib
 
-INTERVAL = 30
+INTERVAL = 60
 
 class Twitter:
 	class NoSuchAccount(Exception):
