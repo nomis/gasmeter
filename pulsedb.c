@@ -183,6 +183,12 @@ static void backup_load(void) {
 	if (loaded == 1 && !pulse[0].on)
 		loaded = 0;
 
+	/* discard duplicate on pulses */
+	while (loaded >= 2 && pulse[0].on && pulse[1].on) {
+		pulse[1] = pulse[2];
+		loaded--;
+	}
+
 	/* write to backup queue */
 	for (count = 0; count < loaded; count++)
 		backup_pulse();
@@ -370,13 +376,7 @@ static void handle_pulse(void) {
 			backup_pulse();
 
 			count++;
-		} else { /* duplicate on pulse */
-			backup_clear();
-			backup_pulse();
-
-			pulse[0] = pulse[1];
-			process_on = true;
-		}
+		} else { /* duplicate on pulse */ }
 	} else {
 		/* on+off pulse waiting for on pulse */
 		assert(count == 2);
