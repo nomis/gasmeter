@@ -111,7 +111,11 @@ static bool check(void) {
 	} else {
 		if (last != state) {
 			changed = true;
+#if INVERT
+			report(state == 0);
+#else
 			report(state != 0);
+#endif
 		}
 	}
 
