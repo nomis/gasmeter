@@ -15,7 +15,7 @@
 /* Check the status 5000µs later */
 #define CHECK_INTERVAL 5000
 
-#define INVERT 0
+#define INVERT 1
 
 #ifdef FORK
 # undef VERBOSE
