@@ -70,7 +70,7 @@ static void init(void) {
 	cerror("Failed to set serial IO status", ioctl(fd, TIOCMSET, &state) != 0);
 #endif
 
-	q = mq_open(mqueue, O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &q_attr);
+	q = mq_open(mqueue, O_WRONLY|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP, &q_attr);
 	cerror(mqueue, q < 0);
 }
 

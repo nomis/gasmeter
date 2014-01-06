@@ -112,7 +112,7 @@ static void init(void) {
 	qmain = mq_open(mqueue_main, O_RDONLY|O_CREAT, S_IRUSR|S_IWUSR, &qmain_attr);
 	cerror(mqueue_main, qmain < 0);
 
-	qbackup = mq_open(mqueue_backup, O_RDWR|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR, &qbackup_attr);
+	qbackup = mq_open(mqueue_backup, O_RDWR|O_NONBLOCK|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP, &qbackup_attr);
 	cerror(mqueue_backup, qbackup < 0);
 
 	signal_init();
