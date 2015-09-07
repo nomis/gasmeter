@@ -3,15 +3,18 @@ LDFLAGS=-Wl,--as-needed
 MQ_LIBS=-lrt
 DB_LIBS=-lpq
 .PHONY: all clean
-all: pulsemon pulsedb pulsefake
+all: pulsemon pulsedb heatingdb pulsefake
 clean:
-	rm -f pulsemon pulsedb pulsefake
+	rm -f pulsemon pulsedb heatingdb pulsefake
 
 pulsemon: pulsemon.c pulsemon.h pulseq.h Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(MQ_LIBS)
 
 pulsedb: pulsedb.c pulsedb.h pulseq.h Makefile pulsedb_postgres.c pulsedb_postgres.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(MQ_LIBS) pulsedb_postgres.c $(DB_LIBS)
+
+heatingdb: pulsedb.c pulsedb.h pulseq.h Makefile pulsedb_postgres.c pulsedb_postgres.h
+	$(CC) $(CFLAGS) $(LDFLAGS) '-DTABLE="heating"' -o $@ $< $(MQ_LIBS) pulsedb_postgres.c $(DB_LIBS)
 
 pulsefake: pulsefake.c pulsefake.h pulseq.h Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(MQ_LIBS)

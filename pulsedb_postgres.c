@@ -12,6 +12,10 @@
 # include <syslog.h>
 #endif
 
+#ifndef TABLE
+# define TABLE "pulses"
+#endif
+
 PGconn *conn = NULL;
 const char *meter;
 
@@ -40,27 +44,27 @@ static bool db_connect(void) {
 		if (conn == NULL) {
 			return false;
 		} else {
-			res = PQprepare(conn, "pulse_exists", "SELECT NULL FROM pulses WHERE meter = $1 AND start = to_timestamp($2)", 2, NULL);
+			res = PQprepare(conn, "pulse_exists", "SELECT NULL FROM " TABLE " WHERE meter = $1 AND start = to_timestamp($2)", 2, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
-			res = PQprepare(conn, "pulse_on", "INSERT INTO pulses (meter, start) VALUES($1, to_timestamp($2))", 2, NULL);
+			res = PQprepare(conn, "pulse_on", "INSERT INTO " TABLE " (meter, start) VALUES($1, to_timestamp($2))", 2, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
-			res = PQprepare(conn, "pulse_off", "UPDATE pulses SET stop = to_timestamp($3) WHERE meter = $1 and start = to_timestamp($2)", 3, NULL);
+			res = PQprepare(conn, "pulse_off", "UPDATE " TABLE " SET stop = to_timestamp($3) WHERE meter = $1 and start = to_timestamp($2)", 3, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
-			res = PQprepare(conn, "pulse_on_off", "INSERT INTO pulses (meter, start, stop) VALUES($1, to_timestamp($2), to_timestamp($3))", 3, NULL);
+			res = PQprepare(conn, "pulse_on_off", "INSERT INTO " TABLE " (meter, start, stop) VALUES($1, to_timestamp($2), to_timestamp($3))", 3, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
-			res = PQprepare(conn, "pulse_cancel", "DELETE FROM pulses WHERE meter = $1 AND start = to_timestamp($2)", 2, NULL);
+			res = PQprepare(conn, "pulse_cancel", "DELETE FROM " TABLE " WHERE meter = $1 AND start = to_timestamp($2)", 2, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
-			res = PQprepare(conn, "pulse_resume", "UPDATE pulses SET stop = NULL WHERE meter = $1 and start = to_timestamp($2)", 2, NULL);
+			res = PQprepare(conn, "pulse_resume", "UPDATE " TABLE " SET stop = NULL WHERE meter = $1 and start = to_timestamp($2)", 2, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
