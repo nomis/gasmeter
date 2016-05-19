@@ -413,7 +413,6 @@ static void save_reset(void) {
 	bool found = false;
 
 	save(__pulse_reset);
-	_printf("reset complete\n");
 	reset_flag = false;
 
 	/* critical section:
@@ -421,6 +420,11 @@ static void save_reset(void) {
 	 * block (hold) all signals
 	 */
 	signal_hold();
+
+	/* clear everything */
+	keep = count;
+	backup_clear();
+	count = keep;
 
 	/* remove the first reset */
 	for (i = 0; i < count; i++) {
@@ -441,12 +445,8 @@ static void save_reset(void) {
 		}
 	}
 
-	/* clear everything */
-	keep = count;
-	backup_clear();
-	count = 0;
-
 	/* restore the pulses */
+	keep = count;
 	for (count = 0; count < keep; count++)
 		backup_pulse();
 
@@ -455,6 +455,9 @@ static void save_reset(void) {
 	* unblock all signals (receive pending signals immediately)
 	*/
 	signal_dispatch();
+
+	if (!reset_flag)
+		_printf("reset complete\n");
 }
 #endif
 
@@ -570,11 +573,8 @@ static void loop(void) {
 		assert(count <= PULSE_CACHE);
 
 #ifndef NO_RESET
-		if (reset_flag) {
+		if (reset_flag)
 			save_reset();
-			_printf("reset complete\n");
-			reset_flag = false;
-		}
 #endif
 
 		switch (count) {
