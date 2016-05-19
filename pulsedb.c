@@ -186,11 +186,10 @@ static void backup_load(void) {
 			_printf("reset ignored\n");
 #endif
 
-			for (j = i; j < loaded - 1; j++) {
+			for (j = i; j < loaded - 1; j++)
 				pulse[j] = pulse[j + 1];
-				loaded--;
-			}
 
+			loaded--;
 			i--;
 		}
 	}
@@ -432,11 +431,10 @@ static void save_reset(void) {
 			} else {
 				int j;
 
-				for (j = i; j < count - 1; j++) {
+				for (j = i; j < count - 1; j++)
 					pulse[j] = pulse[j + 1];
-					count--;
-				}
 
+				count--;
 				i--;
 				found = true;
 			}
