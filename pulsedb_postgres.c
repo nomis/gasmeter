@@ -1,6 +1,6 @@
 #include <sys/time.h>
 #include <errno.h>
-#include <libpq-fe.h>
+#include <postgresql/libpq-fe.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,7 +52,7 @@ static bool db_connect(void) {
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
-			res = PQprepare(conn, "pulse_off", "UPDATE " TABLE " SET stop = to_timestamp($3) WHERE meter = $1 and start = to_timestamp($2)", 3, NULL);
+			res = PQprepare(conn, "pulse_off", "UPDATE " TABLE " SET stop = to_timestamp($3) WHERE meter = $1 AND start = to_timestamp($2)", 3, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
@@ -64,7 +64,15 @@ static bool db_connect(void) {
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
-			res = PQprepare(conn, "pulse_resume", "UPDATE " TABLE " SET stop = NULL WHERE meter = $1 and start = to_timestamp($2)", 2, NULL);
+			res = PQprepare(conn, "pulse_resume", "UPDATE " TABLE " SET stop = NULL WHERE meter = $1 AND start = to_timestamp($2)", 2, NULL);
+			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
+			PQclear(res);
+
+			res = PQprepare(conn, "pulse_reset_check", "SELECT NULL FROM (SELECT value FROM readings WHERE meter = $1 ORDER BY ts DESC LIMIT 1) last WHERE last.value IS NULL", 1, NULL);
+			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
+			PQclear(res);
+
+			res = PQprepare(conn, "pulse_reset", "INSERT INTO readings (meter) VALUES($1)", 1, NULL);
 			if (PQresultStatus(res) != PGRES_COMMAND_OK) goto fail;
 			PQclear(res);
 
@@ -106,6 +114,12 @@ static void db_disconnect(void) {
 		PQclear(res);
 
 		res = PQexec(conn, "DEALLOCATE PREPARE pulse_resume");
+		PQclear(res);
+
+		res = PQexec(conn, "DEALLOCATE PREPARE pulse_reset_check");
+		PQclear(res);
+
+		res = PQexec(conn, "DEALLOCATE PREPARE pulse_reset");
 		PQclear(res);
 
 		PQfinish(conn);
@@ -221,7 +235,7 @@ bool pulse_on_off(const struct timeval *on, const struct timeval *off) {
 bool pulse_cancel(const struct timeval *on) {
 	PGresult *res;
 	char tmp[1][32];
-	const char *param[3] = { meter, tmp[0] };
+	const char *param[2] = { meter, tmp[0] };
 
 	if (!db_connect())
 		return false;
@@ -244,7 +258,7 @@ bool pulse_cancel(const struct timeval *on) {
 bool pulse_resume(const struct timeval *on) {
 	PGresult *res;
 	char tmp[1][32];
-	const char *param[3] = { meter, tmp[0] };
+	const char *param[2] = { meter, tmp[0] };
 
 	if (!db_connect())
 		return false;
@@ -254,6 +268,43 @@ bool pulse_resume(const struct timeval *on) {
 	res = PQexecPrepared(conn, "pulse_resume", 2, param, NULL, NULL, 0);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
 		_printf("pulse_resume: %s", PQerrorMessage(conn));
+
+		PQclear(res);
+		db_disconnect();
+		return false;
+	} else {
+		PQclear(res);
+		return true;
+	}
+}
+
+bool pulse_reset(void) {
+	PGresult *res;
+	const char *param[2] = { meter };
+	bool done;
+
+	if (!db_connect())
+		return false;
+
+	res = PQexecPrepared(conn, "pulse_reset_exists", 1, param, NULL, NULL, 0);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+		_printf("pulse_reset_exists: %s", PQerrorMessage(conn));
+
+		PQclear(res);
+		db_disconnect();
+		return false;
+	} else {
+		done = (PQntuples(res) > 0);
+
+		PQclear(res);
+	}
+
+	if (done)
+		return true;
+
+	res = PQexecPrepared(conn, "pulse_reset", 1, param, NULL, NULL, 0);
+	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+		_printf("pulse_reset: %s", PQerrorMessage(conn));
 
 		PQclear(res);
 		db_disconnect();

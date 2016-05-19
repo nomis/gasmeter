@@ -26,6 +26,7 @@ mqd_t qmain, qbackup;
 bool process_on = true;
 pulse_t pulse[PULSE_CACHE];
 int count = 0;
+bool reset_flag = false;
 #ifdef SYSLOG
 char *ident;
 #endif
@@ -150,7 +151,7 @@ static void backup_clear(void) {
 }
 
 static void backup_load(void) {
-	int ret, loaded = 0;
+	int ret, i, loaded = 0;
 
 	/* critical section:
 	 *
@@ -167,6 +168,17 @@ static void backup_load(void) {
 		} else {
 			_printf("read %d %lu.%06u %d from backup queue\n", loaded, (unsigned long int)pulse[loaded].tv.tv_sec, (unsigned int)pulse[loaded].tv.tv_usec, pulse[loaded].on);
 			loaded++;
+		}
+	}
+
+	for (i = 0; i < loaded; i++) {
+		if (pulse[i].tv.tv_sec == 0) {
+			_printf("reset pending\n");
+			reset_flag = true;
+			if (i < loaded - 1)
+				pulse[i] = pulse[i + 1];
+			loaded--;
+			i--;
 		}
 	}
 
@@ -228,6 +240,12 @@ static bool __pulse_cancel(const struct timeval *on, const struct timeval *off) 
 static bool __pulse_resume(const struct timeval *on, const struct timeval *off) {
 	(void)off;
 	return pulse_resume(on);
+}
+
+static bool __pulse_reset(const struct timeval *on, const struct timeval *off) {
+	(void)on;
+	(void)off;
+	return pulse_reset();
 }
 
 static void save(bool (*func)(const struct timeval *, const struct timeval *)) {
@@ -364,7 +382,13 @@ static void save_on_off_on(void) {
 }
 
 static void handle_pulse(void) {
-	if (count == 0) {
+	if (pulse[count].tv.tv_sec == 0) {
+		backup_pulse();
+		count++;
+
+		_printf("reset pending\n");
+		reset_flag = true;
+	} else if (count == 0) {
 		/* no data */
 		if (pulse[count].on) { /* new on pulse */
 			backup_pulse();
@@ -463,6 +487,16 @@ static void loop(void) {
 		_printf("main loop %d\n", count);
 		assert(count >= 0);
 		assert(count <= PULSE_CACHE);
+
+		if (reset_flag) {
+			save(__pulse_reset);
+
+			_printf("reset complete\n");
+			reset_flag = false;
+
+			backup_clear();
+			count = 0;
+		}
 
 		switch (count) {
 		case 0: /* no data */
