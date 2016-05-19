@@ -219,7 +219,7 @@ static void backup_load(void) {
 #ifndef NO_RESET
 	/* move the reset to the start */
 	if (reset_flag) {
-		for (i = loaded - 1; i > 0; i--)
+		for (i = loaded; i > 0; i--)
 			pulse[i] = pulse[i - 1];
 		pulse[0].tv.tv_sec = 0;
 		pulse[0].tv.tv_usec = 0;
