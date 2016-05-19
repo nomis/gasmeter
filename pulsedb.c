@@ -26,7 +26,9 @@ mqd_t qmain, qbackup;
 bool process_on = true;
 pulse_t pulse[PULSE_CACHE];
 int count = 0;
+#ifndef NO_RESET
 bool reset_flag = false;
+#endif
 #ifdef SYSLOG
 char *ident;
 #endif
@@ -171,10 +173,17 @@ static void backup_load(void) {
 		}
 	}
 
+#ifndef NO_RESET
+	reset_flag = false;
+#endif
 	for (i = 0; i < loaded; i++) {
 		if (pulse[i].tv.tv_sec == 0) {
+#ifndef NO_RESET
 			_printf("reset pending\n");
 			reset_flag = true;
+#else
+			_printf("reset ignored\n");
+#endif
 			if (i < loaded - 1)
 				pulse[i] = pulse[i + 1];
 			loaded--;
@@ -202,6 +211,18 @@ static void backup_load(void) {
 		pulse[1] = pulse[2];
 		loaded--;
 	}
+
+#ifndef NO_RESET
+	/* move the reset to the start */
+	if (reset_flag) {
+		for (i = 0; i < loaded; i++)
+			pulse[i + 1] = pulse[i];
+		pulse[0].tv.tv_sec = 0;
+		pulse[0].tv.tv_usec = 0;
+		pulse[0].on = false;
+		loaded++;
+	}
+#endif
 
 	/* write to backup queue */
 	for (count = 0; count < loaded; count++)
@@ -383,13 +404,52 @@ static void save_on_off_on(void) {
 	}
 }
 
+#ifndef NO_RESET
+static void save_reset(void) {
+	int i, keep;
+
+	save(__pulse_reset);
+	_printf("reset complete\n");
+	reset_flag = false;
+
+	/* critical section:
+	 *
+	 * block (hold) all signals
+	 */
+	signal_hold();
+
+	/* keep the existing pulses */
+	keep = count;
+
+	/* clear everything */
+	backup_clear();
+	count = 0;
+
+	/* restore the pulses */
+	for (i = 0; i < keep; i++) {
+		backup_pulse();
+		count++;
+	}
+
+	/* non-critical section:
+	*
+	* unblock all signals (receive pending signals immediately)
+	*/
+	signal_dispatch();
+}
+#endif
+
 static void handle_pulse(void) {
 	if (pulse[count].tv.tv_sec == 0) {
+#ifdef NO_RESET
+		_printf("reset ignored\n");
+#else
 		backup_pulse();
 		count++;
 
 		_printf("reset pending\n");
 		reset_flag = true;
+#endif
 	} else if (count == 0) {
 		/* no data */
 		if (pulse[count].on) { /* new on pulse */
@@ -490,19 +550,13 @@ static void loop(void) {
 		assert(count >= 0);
 		assert(count <= PULSE_CACHE);
 
-		if (reset_flag) {
 #ifndef NO_RESET
-			save(__pulse_reset);
-
+		if (reset_flag) {
+			save_reset();
 			_printf("reset complete\n");
-#else
-			_printf("reset ignored\n");
-#endif
 			reset_flag = false;
-
-			backup_clear();
-			count = 0;
 		}
+#endif
 
 		switch (count) {
 		case 0: /* no data */
