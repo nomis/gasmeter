@@ -286,9 +286,9 @@ bool pulse_reset(void) {
 	if (!db_connect())
 		return false;
 
-	res = PQexecPrepared(conn, "pulse_reset_exists", 1, param, NULL, NULL, 0);
+	res = PQexecPrepared(conn, "pulse_reset_check", 1, param, NULL, NULL, 0);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-		_printf("pulse_reset_exists: %s", PQerrorMessage(conn));
+		_printf("pulse_reset_check: %s", PQerrorMessage(conn));
 
 		PQclear(res);
 		db_disconnect();
