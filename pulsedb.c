@@ -573,8 +573,10 @@ static void loop(void) {
 		assert(count <= PULSE_CACHE);
 
 #ifndef NO_RESET
-		if (reset_flag)
+		if (reset_flag) {
 			save_reset();
+			continue;
+		}
 #endif
 
 		switch (count) {
