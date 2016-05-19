@@ -178,15 +178,19 @@ static void backup_load(void) {
 #endif
 	for (i = 0; i < loaded; i++) {
 		if (pulse[i].tv.tv_sec == 0) {
+			int j;
 #ifndef NO_RESET
 			_printf("reset pending\n");
 			reset_flag = true;
 #else
 			_printf("reset ignored\n");
 #endif
-			if (i < loaded - 1)
-				pulse[i] = pulse[i + 1];
-			loaded--;
+
+			for (j = i; j < loaded - 1; j++) {
+				pulse[j] = pulse[j + 1];
+				loaded--;
+			}
+
 			i--;
 		}
 	}
@@ -407,6 +411,7 @@ static void save_on_off_on(void) {
 #ifndef NO_RESET
 static void save_reset(void) {
 	int i, keep;
+	bool found = false;
 
 	save(__pulse_reset);
 	_printf("reset complete\n");
@@ -418,18 +423,34 @@ static void save_reset(void) {
 	 */
 	signal_hold();
 
-	/* keep the existing pulses */
-	keep = count;
+	/* remove the first reset */
+	for (i = 0; i < count; i++) {
+		if (pulse[i].tv.tv_sec == 0) {
+			if (found) {
+				_printf("reset pending\n");
+				reset_flag = true;
+			} else {
+				int j;
+
+				for (j = i; j < count - 1; j++) {
+					pulse[j] = pulse[j + 1];
+					count--;
+				}
+
+				i--;
+				found = true;
+			}
+		}
+	}
 
 	/* clear everything */
+	keep = count;
 	backup_clear();
 	count = 0;
 
 	/* restore the pulses */
-	for (i = 0; i < keep; i++) {
+	for (count = 0; count < keep; count++)
 		backup_pulse();
-		count++;
-	}
 
 	/* non-critical section:
 	*
