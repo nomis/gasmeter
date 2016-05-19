@@ -242,11 +242,13 @@ static bool __pulse_resume(const struct timeval *on, const struct timeval *off) 
 	return pulse_resume(on);
 }
 
+#ifndef NO_RESET
 static bool __pulse_reset(const struct timeval *on, const struct timeval *off) {
 	(void)on;
 	(void)off;
 	return pulse_reset();
 }
+#endif
 
 static void save(bool (*func)(const struct timeval *, const struct timeval *)) {
 	int backoff = 1;
@@ -489,9 +491,13 @@ static void loop(void) {
 		assert(count <= PULSE_CACHE);
 
 		if (reset_flag) {
+#ifndef NO_RESET
 			save(__pulse_reset);
 
 			_printf("reset complete\n");
+#else
+			_printf("reset ignored\n");
+#endif
 			reset_flag = false;
 
 			backup_clear();

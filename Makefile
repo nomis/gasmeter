@@ -14,7 +14,7 @@ pulsedb: pulsedb.c pulsedb.h pulseq.h Makefile pulsedb_postgres.c pulsedb_postgr
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(MQ_LIBS) pulsedb_postgres.c $(DB_LIBS)
 
 heatingdb: pulsedb.c pulsedb.h pulseq.h Makefile pulsedb_postgres.c pulsedb_postgres.h
-	$(CC) $(CFLAGS) $(LDFLAGS) '-DTABLE="heating"' -o $@ $< $(MQ_LIBS) pulsedb_postgres.c $(DB_LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) '-DTABLE="heating"' '-DNO_RESET' -o $@ $< $(MQ_LIBS) pulsedb_postgres.c $(DB_LIBS)
 
 pulsefake: pulsefake.c pulsefake.h pulseq.h Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(MQ_LIBS)
