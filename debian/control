@@ -1,0 +1,19 @@
+Source: gasmeter
+Section: misc
+Priority: optional
+Maintainer: Simon Arlott <ubuntu@sa.me.uk>
+Build-Depends: debhelper (>= 9), libpq-dev
+Standards-Version: 3.9.6
+
+Package: gasmeter
+Architecture: any
+Depends: arduino-mux, ${misc:Depends}, ${shlibs:Depends}
+Description: Gas Meter pulse/heating database manager
+ Processes gas meter/heating data from arduino-mux message queue and stores
+ it in a database.
+
+Package: gasmeter-dbg
+Architecture: any
+Depends: gasmeter (= ${binary:Version}), ${misc:Depends}
+Description: debugging symboles for gasmeter
+ This package contains the debugging symbols for gasmeter

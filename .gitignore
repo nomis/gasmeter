@@ -4,3 +4,10 @@ heatingdb
 pulsefake
 *.pyc
 *.pyo
+debian/gasmeter.debhelper.log
+debian/gasmeter.substvars
+debian/gasmeter/
+debian/gasmeter-dbg.debhelper.log
+debian/gasmeter-dbg.substvars
+debian/gasmeter-dbg/
+debian/files

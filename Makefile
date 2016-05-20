@@ -2,10 +2,21 @@ CFLAGS=-Wall -Wextra -Wshadow -O2 -ggdb -D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURC
 LDFLAGS=-Wl,--as-needed
 MQ_LIBS=-lrt
 DB_LIBS=-lpq
-.PHONY: all clean
+INSTALL=install
+
+.PHONY: all clean install
+
 all: pulsemon pulsedb heatingdb pulsefake
 clean:
 	rm -f pulsemon pulsedb heatingdb pulsefake
+
+prefix=/usr
+exec_prefix=$(prefix)
+libdir=$(exec_prefix)/lib
+
+install: all
+	$(INSTALL) -m 755 -D pulsedb $(DESTDIR)$(libdir)/arduino-mux/pulsedb
+	$(INSTALL) -m 755 -D heatingdb $(DESTDIR)$(libdir)/arduino-mux/heatingdb
 
 pulsemon: pulsemon.c pulsemon.h pulseq.h Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(MQ_LIBS)
