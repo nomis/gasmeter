@@ -17,6 +17,7 @@ libdir=$(exec_prefix)/lib
 install: all
 	$(INSTALL) -m 755 -D pulsedb $(DESTDIR)$(libdir)/arduino-mux/pulsedb
 	$(INSTALL) -m 755 -D heatingdb $(DESTDIR)$(libdir)/arduino-mux/heatingdb
+	$(INSTALL) -m 755 -D pulsefake $(DESTDIR)$(libdir)/arduino-mux/pulsefake
 
 pulsemon: pulsemon.c pulsemon.h pulseq.h Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(MQ_LIBS)
