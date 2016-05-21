@@ -1,3 +1,9 @@
+gasmeter (2-1) xenial; urgency=medium
+
+  * Don't fork
+
+ -- Simon Arlott <ubuntu@sa.me.uk>  Sat, 21 May 2016 10:44:06 +0100
+
 gasmeter (1-1) xenial; urgency=medium
 
   * Install pulsefake
