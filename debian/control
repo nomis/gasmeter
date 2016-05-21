@@ -15,5 +15,5 @@ Description: Gas Meter pulse/heating database manager
 Package: gasmeter-dbg
 Architecture: any
 Depends: gasmeter (= ${binary:Version}), ${misc:Depends}
-Description: debugging symboles for gasmeter
+Description: debugging symbols for gasmeter
  This package contains the debugging symbols for gasmeter
