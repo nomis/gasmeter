@@ -146,10 +146,11 @@ static void backup_pulse(void) {
 
 static void backup_clear(void) {
 	_printf("clearing backup queue\n");
-	while (count-- > 0) {
+	while (count > 0) {
 		pulse_t tmp;
 		int ret = mq_receive(qbackup, (char *)&tmp, sizeof(tmp), 0);
 		cerror("mq_receive backup", ret != sizeof(pulse_t));
+		count--;
 	}
 }
 
