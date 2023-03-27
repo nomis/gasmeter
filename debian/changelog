@@ -1,3 +1,9 @@
+gasmeter (5-2) focal; urgency=medium
+
+  * Update for focal
+
+ -- Simon Arlott <ubuntu@sa.me.uk>  Mon, 27 Mar 2023 19:30:28 +0100
+
 gasmeter (5-1) bionic; urgency=medium
 
   * Update for bionic
